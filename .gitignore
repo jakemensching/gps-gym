@@ -1,0 +1,26 @@
+# macOS / Xcode
+.DS_Store
+xcuserdata/
+DerivedData/
+*.xcuserstate
+build/
+.build/
+.swiftpm/
+
+# XcodeGen output — regenerate with `cd ios && xcodegen generate`
+ios/GPSGym.xcodeproj/
+ios/**/Info.plist
+ios/**/*.entitlements
+
+# Web
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+next-env.d.ts
+.vercel
+
+# Secrets
+.env
+.env.*
+!.env.example

@@ -1,0 +1,111 @@
+# XcodeGen spec — the .xcodeproj is generated, never committed.
+#   brew install xcodegen && cd ios && xcodegen generate && open GPSGym.xcodeproj
+#
+# Bundle IDs and the App Group must match what you register on
+# developer.apple.com. Change them in ONE place: here + AppGroup.identifier.
+name: GPSGym
+
+options:
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    DEVELOPMENT_TEAM: "" # ← your Team ID (Xcode → Settings → Accounts)
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    TARGETED_DEVICE_FAMILY: "1"
+    CODE_SIGN_STYLE: Automatic
+
+packages:
+  GPSGymCore:
+    path: Packages/GPSGymCore
+
+targets:
+  GPSGym:
+    type: application
+    platform: iOS
+    sources:
+      - GPSGym
+      - Shared
+    dependencies:
+      - package: GPSGymCore
+      - target: DeviceActivityMonitorExtension
+      - target: ShieldConfigurationExtension
+    info:
+      path: GPSGym/Info.plist
+      properties:
+        CFBundleDisplayName: GPS-GYM
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        UIUserInterfaceStyle: Dark
+        ITSAppUsesNonExemptEncryption: false
+        NSLocationWhenInUseUsageDescription: >-
+          GPS-GYM checks your location only during a workout to confirm you're at
+          your gym. We store the distance to your gym, never your location history.
+    entitlements:
+      path: GPSGym/GPSGym.entitlements
+      properties:
+        com.apple.developer.family-controls: true
+        com.apple.security.application-groups:
+          - group.com.jakemensching.gpsgym
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.jakemensching.gpsgym
+
+  DeviceActivityMonitorExtension:
+    type: app-extension
+    platform: iOS
+    sources:
+      - DeviceActivityMonitorExtension
+      - Shared
+    dependencies:
+      - package: GPSGymCore
+    info:
+      path: DeviceActivityMonitorExtension/Info.plist
+      properties:
+        CFBundleDisplayName: GPS-GYM Monitor
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.deviceactivity.monitor-extension
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).DeviceActivityMonitorExtension
+    entitlements:
+      path: DeviceActivityMonitorExtension/DeviceActivityMonitorExtension.entitlements
+      properties:
+        com.apple.developer.family-controls: true
+        com.apple.security.application-groups:
+          - group.com.jakemensching.gpsgym
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.jakemensching.gpsgym.monitor
+
+  ShieldConfigurationExtension:
+    type: app-extension
+    platform: iOS
+    sources:
+      - ShieldConfigurationExtension
+    info:
+      path: ShieldConfigurationExtension/Info.plist
+      properties:
+        CFBundleDisplayName: GPS-GYM Shield
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.ManagedSettingsUI.shield-configuration-service
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShieldConfigurationExtension
+    entitlements:
+      path: ShieldConfigurationExtension/ShieldConfigurationExtension.entitlements
+      properties:
+        com.apple.developer.family-controls: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.jakemensching.gpsgym.shield
+
+schemes:
+  GPSGym:
+    build:
+      targets:
+        GPSGym: all
+    run:
+      config: Debug
+    archive:
+      config: Release
