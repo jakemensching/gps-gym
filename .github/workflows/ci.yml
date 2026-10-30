@@ -13,14 +13,14 @@ jobs:
     name: Core logic tests (Swift)
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - run: swift test --package-path ios/Packages/GPSGymCore
 
   ios-build:
     name: iOS app build (Simulator, unsigned)
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - run: brew install xcodegen
       - run: xcodegen generate
         working-directory: ios
@@ -36,3 +36,20 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             | tail -n 200
 
+  web:
+    name: Web app (lint, test, build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
