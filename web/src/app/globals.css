@@ -140,7 +140,7 @@ a.btn { display: inline-flex; align-items: center; justify-content: center; text
   position: fixed; bottom: 0; left: 0; right: 0; padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
   background: rgba(10, 10, 12, 0.9); backdrop-filter: blur(16px); border-top: 1px solid var(--stroke); z-index: 5;
 }
-.footer-bar > * { max-width: 528px; margin: 0 auto; }
+.footer-bar > * { display: block; max-width: 528px; margin: 0 auto; }
 
 .overlay { position: fixed; inset: 0; background: var(--bg); overflow-y: auto; z-index: 10; }
 .modal-backdrop { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.6); display: grid; place-items: end center; z-index: 20; }
@@ -158,7 +158,7 @@ table.list { width: 100%; border-collapse: collapse; }
 table.list td { padding: 10px 0; border-bottom: 1px solid var(--stroke); vertical-align: top; }
 
 .field { display: flex; flex-direction: column; gap: 6px; }
-input.text, select.text {
+input.text, select.text, textarea.text {
   width: 100%; background: var(--card); border: 1px solid var(--stroke); border-radius: 12px; padding: 12px;
 }
 
@@ -167,3 +167,4 @@ input.text, select.text {
 .hero h1 { font-size: clamp(40px, 9vw, 64px); font-weight: 900; letter-spacing: -0.03em; line-height: 1; }
 .hero h1 span { color: var(--accent); }
 .feature-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+textarea.text { resize: vertical; font: inherit; color: inherit; }

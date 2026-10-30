@@ -13,13 +13,19 @@ private func date(_ day: Int, hour: Int = 12) -> Date {
 }
 
 private func profile(
-    goal: FitnessGoal = .buildMuscle,
+    goals: Set<FitnessGoal> = [.buildMuscle],
     experience: Experience = .intermediate,
     equipment: Equipment = .fullGym,
     days: Set<Weekday> = [.monday, .tuesday, .thursday, .friday],
-    minutes: Int = 60
+    minutes: Int = 60,
+    avoid: Set<String> = [],
+    focus: Set<MovementPattern> = [],
+    coachNote: String? = nil
 ) -> TrainingProfile {
-    TrainingProfile(goal: goal, experience: experience, equipment: equipment, mode: .gym, trainingDays: days, sessionMinutes: minutes)
+    TrainingProfile(
+        goals: goals, experience: experience, equipment: equipment, mode: .gym, trainingDays: days, sessionMinutes: minutes,
+        avoidExerciseIDs: avoid, focusPatterns: focus, coachNote: coachNote
+    )
 }
 
 final class WorkoutGeneratorTests: XCTestCase {
@@ -47,7 +53,7 @@ final class WorkoutGeneratorTests: XCTestCase {
     func testEveryEquipmentTierProducesWorkoutsWithOnlyAvailableGear() {
         for equipment in Equipment.allCases {
             for goal in FitnessGoal.allCases {
-                let plan = WorkoutGenerator.generate(for: profile(goal: goal, equipment: equipment))
+                let plan = WorkoutGenerator.generate(for: profile(goals: [goal], equipment: equipment))
                 for day in plan.days {
                     XCTAssertGreaterThanOrEqual(day.exercises.count, 3, "\(equipment) \(goal) \(day.id)")
                     XCTAssertTrue(day.exercises.allSatisfy { equipment.available.contains($0.exercise.equipment) })
@@ -60,7 +66,7 @@ final class WorkoutGeneratorTests: XCTestCase {
     func testSessionsFitTimeBudgetWhenPossible() {
         for minutes in TrainingProfile.sessionLengthOptions {
             for goal in FitnessGoal.allCases {
-                let plan = WorkoutGenerator.generate(for: profile(goal: goal, experience: .advanced, minutes: minutes))
+                let plan = WorkoutGenerator.generate(for: profile(goals: [goal], experience: .advanced, minutes: minutes))
                 for day in plan.days where day.exercises.count > 3 {
                     XCTAssertLessThanOrEqual(day.estimatedMinutes, minutes, "\(goal) \(minutes)min \(day.id)")
                 }
@@ -69,10 +75,40 @@ final class WorkoutGeneratorTests: XCTestCase {
     }
 
     func testStrengthUsesLowerRepsAndLongerRestThanFatLoss() {
-        let strength = WorkoutGenerator.generate(for: profile(goal: .getStronger)).days[0].exercises[0]
-        let fatLoss = WorkoutGenerator.generate(for: profile(goal: .loseFat)).days[0].exercises[0]
+        let strength = WorkoutGenerator.generate(for: profile(goals: [.getStronger])).days[0].exercises[0]
+        let fatLoss = WorkoutGenerator.generate(for: profile(goals: [.loseFat])).days[0].exercises[0]
         XCTAssertLessThan(strength.repsHigh, fatLoss.repsHigh)
         XCTAssertGreaterThan(strength.restSeconds, fatLoss.restSeconds)
+    }
+}
+
+final class PersonalizationTests: XCTestCase {
+    func testGoalRoles() {
+        XCTAssertEqual(WorkoutGenerator.goal(for: .primary, goals: [.loseFat, .getStronger]), .getStronger)
+        XCTAssertEqual(WorkoutGenerator.goal(for: .accessory, goals: [.loseFat, .getStronger]), .loseFat)
+        XCTAssertEqual(WorkoutGenerator.goal(for: .secondary, goals: [.loseFat, .buildMuscle, .getStronger]), .buildMuscle)
+        XCTAssertEqual(WorkoutGenerator.goal(for: .primary, goals: []), .buildMuscle)
+    }
+
+    func testRecommendedSessionMinutes() {
+        XCTAssertEqual(TrainingProfile.recommendedSessionMinutes(goals: [.buildMuscle], experience: .beginner), 45)
+        XCTAssertEqual(TrainingProfile.recommendedSessionMinutes(goals: [.getStronger, .loseFat], experience: .intermediate), 60)
+        XCTAssertEqual(TrainingProfile.recommendedSessionMinutes(goals: [.loseFat], experience: .advanced), 60)
+        XCTAssertEqual(TrainingProfile.recommendedSessionMinutes(goals: [.generalFitness], experience: .beginner), 30)
+    }
+
+    func testAvoidedExercisesAreLeftOut() {
+        let plan = WorkoutGenerator.generate(for: profile(avoid: ["back-squat", "deadlift"]))
+        let ids = plan.days.flatMap { $0.exercises.map(\.id) }
+        XCTAssertFalse(ids.contains("back-squat"))
+        XCTAssertFalse(ids.contains("deadlift"))
+    }
+
+    func testFocusAddsASetAndCoachNoteComesFirst() {
+        let base = WorkoutGenerator.generate(for: profile(minutes: 90)).days[0].exercises.first { $0.exercise.pattern == .biceps }!
+        let focused = WorkoutGenerator.generate(for: profile(minutes: 90, focus: [.biceps], coachNote: "Arms day energy."))
+        XCTAssertEqual(focused.days[0].exercises.first { $0.exercise.pattern == .biceps }!.sets, base.sets + 1)
+        XCTAssertEqual(focused.progressionNotes.first, "Arms day energy.")
     }
 }
 

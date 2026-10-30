@@ -1,19 +1,19 @@
 import { describe, expect, it } from "vitest";
 import { exerciseById } from "./exercises";
-import { dayMinutes, generatePlan } from "./generator";
+import { dayMinutes, generatePlan, goalForRole } from "./generator";
 import {
   canSwapRestDay, currentStreak, dayKey, dayStatus, emptyEnforcement, estimatedOneRepMax, evaluate,
   locationStatus, standardPolicy, suggest, weeklyAdherence, type EnforcementState, type LocationSample,
 } from "./rules";
 import {
-  availableEquipment, EQUIPMENT, GOALS, SESSION_LENGTHS,
+  availableEquipment, EQUIPMENT, GOALS, recommendedSessionMinutes, SESSION_LENGTHS,
   type PlannedExercise, type TrainingProfile, type Weekday,
 } from "./types";
 
 // Same cases as ios/Packages/GPSGymCore/Tests — the two implementations must agree.
 
 const profile = (o: Partial<TrainingProfile> = {}): TrainingProfile => ({
-  goal: "buildMuscle", experience: "intermediate", equipment: "fullGym", mode: "gym",
+  goals: ["buildMuscle"], experience: "intermediate", equipment: "fullGym", mode: "gym",
   trainingDays: [2, 3, 5, 6], sessionMinutes: 60, ...o,
 });
 
@@ -40,7 +40,7 @@ describe("generator", () => {
   it("only uses available equipment, no duplicates, ≥ 3 exercises", () => {
     for (const { id: equipment } of EQUIPMENT) {
       for (const { id: goal } of GOALS) {
-        for (const day of generatePlan(profile({ goal, equipment })).days) {
+        for (const day of generatePlan(profile({ goals: [goal], equipment })).days) {
           expect(day.exercises.length).toBeGreaterThanOrEqual(3);
           expect(day.exercises.every((e) => availableEquipment(equipment).includes(e.exercise.equipment))).toBe(true);
           expect(new Set(day.exercises.map((e) => e.exercise.id)).size).toBe(day.exercises.length);
@@ -52,7 +52,7 @@ describe("generator", () => {
   it("fits the time budget when it can", () => {
     for (const minutes of SESSION_LENGTHS) {
       for (const { id: goal } of GOALS) {
-        for (const day of generatePlan(profile({ goal, experience: "advanced", sessionMinutes: minutes })).days) {
+        for (const day of generatePlan(profile({ goals: [goal], experience: "advanced", sessionMinutes: minutes })).days) {
           if (day.exercises.length > 3) expect(dayMinutes(day)).toBeLessThanOrEqual(minutes);
         }
       }
@@ -61,9 +61,39 @@ describe("generator", () => {
 
   it("matches the Swift generator for a reference profile", () => {
     // Pinned snapshot so the TS and Swift ports can be compared by eye.
-    const plan = generatePlan(profile({ goal: "getStronger", experience: "advanced", equipment: "dumbbells" }));
+    const plan = generatePlan(profile({ goals: ["getStronger"], experience: "advanced", equipment: "dumbbells" }));
     expect(plan.name).toBe("4-Day Upper / Lower");
     expect(plan.days[0].exercises.map((e) => e.exercise.id)[0]).toBe("db-incline-press");
+  });
+});
+
+describe("multiple goals and personalization", () => {
+  it("lets the strength goal drive main lifts and the fat-loss goal drive accessories", () => {
+    expect(goalForRole(["loseFat", "getStronger"], "primary")).toBe("getStronger");
+    expect(goalForRole(["loseFat", "getStronger"], "accessory")).toBe("loseFat");
+    expect(goalForRole(["loseFat", "buildMuscle", "getStronger"], "secondary")).toBe("buildMuscle");
+    expect(goalForRole([], "primary")).toBe("buildMuscle");
+  });
+
+  it("recommends a session length from goals and experience", () => {
+    expect(recommendedSessionMinutes(["buildMuscle"], "beginner")).toBe(45);
+    expect(recommendedSessionMinutes(["getStronger", "loseFat"], "intermediate")).toBe(60);
+    expect(recommendedSessionMinutes(["loseFat"], "advanced")).toBe(60);
+    expect(recommendedSessionMinutes(["generalFitness"], "beginner")).toBe(30);
+  });
+
+  it("leaves out avoided exercises", () => {
+    const plan = generatePlan(profile({ avoidExerciseIds: ["back-squat", "deadlift"] }));
+    const ids = plan.days.flatMap((d) => d.exercises.map((e) => e.exercise.id));
+    expect(ids).not.toContain("back-squat");
+    expect(ids).not.toContain("deadlift");
+  });
+
+  it("adds a set to focus patterns and puts the coach note first", () => {
+    const base = generatePlan(profile({ sessionMinutes: 90 })).days[0].exercises.find((e) => e.exercise.pattern === "biceps")!;
+    const focused = generatePlan(profile({ sessionMinutes: 90, focusPatterns: ["biceps"], coachNote: "Arms day energy." }));
+    expect(focused.days[0].exercises.find((e) => e.exercise.pattern === "biceps")!.sets).toBe(base.sets + 1);
+    expect(focused.progressionNotes[0]).toBe("Arms day energy.");
   });
 });
 

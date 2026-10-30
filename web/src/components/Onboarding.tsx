@@ -3,38 +3,80 @@
 import { useState } from "react";
 import { dayMinutes, generatePlan } from "@/lib/core/generator";
 import {
-  EQUIPMENT, EXPERIENCE, GOALS, SESSION_LENGTHS, WEEKDAY_SHORT,
+  EQUIPMENT, EXPERIENCE, GOALS, recommendedSessionMinutes, WEEKDAY_SHORT,
   type Equipment, type Experience, type FitnessGoal, type TrainingProfile, type Weekday, type WorkoutMode,
 } from "@/lib/core/types";
+import { AI_ENABLED, personalize, type Personalization } from "@/lib/personalize";
 import { completeOnboarding, type GymLocation } from "@/lib/store";
 import { GymPicker } from "./GymPicker";
-import { Option, Segmented, WeekdayPicker } from "./ui";
+import { Option, SessionLengthPicker, WeekdayPicker } from "./ui";
 
 const STEPS = ["welcome", "goal", "experience", "schedule", "setting", "gym", "plan"] as const;
 type Step = (typeof STEPS)[number];
 
 const GOAL_ICON: Record<FitnessGoal, string> = { buildMuscle: "💪", getStronger: "🏋️", generalFitness: "❤️", loseFat: "🔥" };
 
+type AiState =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "done"; result: Personalization }
+  | { status: "error"; message: string };
+
 export function Onboarding() {
   const [step, setStep] = useState<Step>("welcome");
-  const [goal, setGoal] = useState<FitnessGoal>("buildMuscle");
+  const [goals, setGoals] = useState<FitnessGoal[]>(["buildMuscle"]);
+  const [description, setDescription] = useState("");
   const [experience, setExperience] = useState<Experience>("beginner");
   const [days, setDays] = useState<Weekday[]>([2, 4, 6]);
-  const [minutes, setMinutes] = useState(60);
+  const [customMinutes, setCustomMinutes] = useState<number | null>(null);
   const [mode, setMode] = useState<WorkoutMode>("gym");
   const [equipment, setEquipment] = useState<Equipment>("fullGym");
   const [gym, setGym] = useState<GymLocation | null>(null);
+  const [ai, setAi] = useState<AiState>({ status: "idle" });
 
-  const profile: TrainingProfile = { goal, experience, equipment, mode, trainingDays: days, sessionMinutes: minutes };
+  const selectedGoals: FitnessGoal[] = goals.length ? goals : ["buildMuscle"];
+  const minutes = customMinutes ?? recommendedSessionMinutes(selectedGoals, experience);
+  const base: TrainingProfile = {
+    goals: selectedGoals, experience, equipment, mode, trainingDays: days, sessionMinutes: minutes,
+    goalDescription: description.trim() || undefined,
+  };
+  const profile: TrainingProfile = ai.status === "done"
+    ? {
+        ...base,
+        goals: [...new Set([...selectedGoals, ...ai.result.goals])],
+        avoidExerciseIds: ai.result.avoidExerciseIds,
+        focusPatterns: ai.result.focusPatterns,
+        coachNote: ai.result.coachNote || undefined,
+      }
+    : base;
   const plan = generatePlan(profile); // cheap and deterministic — no memo needed
 
   const index = STEPS.indexOf(step);
+
+  async function runPersonalization() {
+    if (!AI_ENABLED || !description.trim()) return;
+    setAi({ status: "loading" });
+    try {
+      setAi({ status: "done", result: await personalize(description, base) });
+    } catch (e) {
+      setAi({ status: "error", message: e instanceof Error ? e.message : "Something went wrong." });
+    }
+  }
+
   const go = (delta: number) => {
     let next = index + delta;
     if (STEPS[next] === "gym" && mode === "home") next += delta;
-    if (next >= 0 && next < STEPS.length) setStep(STEPS[next]);
+    if (next < 0 || next >= STEPS.length) return;
+    if (STEPS[next] === "plan") void runPersonalization();
+    setStep(STEPS[next]);
   };
-  const canContinue = step === "schedule" ? days.length > 0 : true;
+  const toggleGoal = (g: FitnessGoal) => setGoals(goals.includes(g) ? goals.filter((x) => x !== g) : [...goals, g]);
+
+  const canContinue =
+    step === "goal" ? goals.length > 0 || description.trim().length > 0
+    : step === "schedule" ? days.length > 0
+    : step === "plan" ? ai.status !== "loading"
+    : true;
 
   return (
     <main className="container">
@@ -56,7 +98,7 @@ export function Onboarding() {
               GPS-GYM builds your training plan, holds you to it, and tracks your progress.
             </p>
             <div className="stack small" style={{ gap: 8 }}>
-              <span>📋 A plan built for your goal</span>
+              <span>📋 A plan built for your goals</span>
               <span>🔒 Apps locked until you train (iPhone app)</span>
               <span>📍 Verified at your gym, privately</span>
             </div>
@@ -65,10 +107,27 @@ export function Onboarding() {
 
         {step === "goal" && (
           <>
-            <h1 className="title">What&apos;s your main goal?</h1>
+            <h1 className="title">What are your goals?</h1>
+            <p className="muted">Select all that apply.</p>
             {GOALS.map((g) => (
-              <Option key={g.id} title={g.title} icon={GOAL_ICON[g.id]} selected={goal === g.id} onClick={() => setGoal(g.id)} />
+              <Option key={g.id} title={g.title} icon={GOAL_ICON[g.id]} selected={goals.includes(g.id)} onClick={() => toggleGoal(g.id)} />
             ))}
+            <label className="field" style={{ marginTop: 8 }}>
+              <strong>Or describe it in your own words</strong>
+              <textarea
+                className="text"
+                rows={3}
+                maxLength={600}
+                placeholder="e.g. Gain 5 lbs of muscle in 2 months. Bigger arms. My left knee hurts on squats."
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+              />
+              <span className="small muted">
+                {AI_ENABLED
+                  ? "✨ We'll use this to personalize your plan."
+                  : "We'll save this. AI personalization is coming soon — for now your plan uses the goals above."}
+              </span>
+            </label>
           </>
         )}
 
@@ -91,9 +150,11 @@ export function Onboarding() {
                 Heads up: 3–4 days is plenty when you&apos;re starting out — and easier to stick with.
               </p>
             )}
-            <strong>Session length</strong>
-            <Segmented label="Session length" value={minutes} onChange={setMinutes}
-              options={SESSION_LENGTHS.map((m) => ({ value: m, label: `${m} min` }))} />
+            <SessionLengthPicker
+              recommended={recommendedSessionMinutes(selectedGoals, experience)}
+              custom={customMinutes}
+              onChange={setCustomMinutes}
+            />
           </>
         )}
 
@@ -121,12 +182,23 @@ export function Onboarding() {
 
         {step === "plan" && (
           <>
-            <h1 className="title">Your plan is ready</h1>
-            <p className="muted">{plan.name}</p>
+            <h1 className="title">{ai.status === "loading" ? "Personalizing your plan…" : "Your plan is ready"}</h1>
+            <p className="muted">{plan.name} · ~{minutes} min sessions</p>
+            {ai.status === "done" && profile.coachNote && (
+              <div className="card" style={{ borderColor: "var(--accent)" }}>
+                <span className="eyebrow">✨ Personalized for you</span>
+                <p>{profile.coachNote}</p>
+              </div>
+            )}
+            {ai.status === "error" && (
+              <p className="small" style={{ color: "var(--warn)" }}>
+                Couldn&apos;t personalize with AI ({ai.message}). Here&apos;s your plan from your selections — you can retry later in Settings.
+              </p>
+            )}
             {plan.schedule.map((s) => {
               const day = plan.days.find((d) => d.id === s.workoutDayId)!;
               return (
-                <div className="card" key={s.weekday}>
+                <div className="card" key={s.weekday} style={{ opacity: ai.status === "loading" ? 0.5 : 1 }}>
                   <div className="row">
                     <span className="eyebrow" style={{ width: 40 }}>{WEEKDAY_SHORT[s.weekday - 1]}</span>
                     <div>

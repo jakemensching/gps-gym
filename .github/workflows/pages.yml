@@ -34,6 +34,10 @@ jobs:
         env:
           GITHUB_PAGES: "true"
           NEXT_TELEMETRY_DISABLED: "1"
+          # Optional — set in Settings → Secrets and variables → Actions → Variables to turn on AI
+          # personalization (see docs/AI-PERSONALIZATION.md). Both are public values, not secrets.
+          NEXT_PUBLIC_PLAN_AI_URL: ${{ vars.PLAN_AI_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
       - run: touch out/.nojekyll
       - uses: actions/upload-pages-artifact@v4
         with:

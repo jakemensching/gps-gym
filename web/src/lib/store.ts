@@ -55,6 +55,15 @@ const KEY = "gpsgym.v1";
 const listeners = new Set<() => void>();
 let cache: { raw: string | null; state: AppState | null } = { raw: null, state: null };
 
+/** Upgrade data saved by older versions of the web app. */
+function migrate(state: AppState): AppState {
+  const legacy = state.profile as TrainingProfile & { goal?: TrainingProfile["goals"][number] };
+  if (!Array.isArray(legacy.goals)) {
+    state.profile = { ...legacy, goals: [legacy.goal ?? "buildMuscle"] };
+  }
+  return state;
+}
+
 function read(): AppState | null {
   let raw: string | null = null;
   try {
@@ -64,7 +73,7 @@ function read(): AppState | null {
   }
   if (raw !== cache.raw) {
     try {
-      cache = { raw, state: raw ? (JSON.parse(raw) as AppState) : null };
+      cache = { raw, state: raw ? migrate(JSON.parse(raw)) : null };
     } catch {
       cache = { raw, state: null };
     }

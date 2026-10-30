@@ -51,12 +51,34 @@ export function availableEquipment(e: Equipment): Equipment[] {
 }
 
 export interface TrainingProfile {
-  goal: FitnessGoal;
+  /** One or more goals, any order. Never empty (generator falls back to buildMuscle). */
+  goals: FitnessGoal[];
   experience: Experience;
   equipment: Equipment;
   mode: WorkoutMode;
   trainingDays: Weekday[];
   sessionMinutes: number;
+  /** Exercises to leave out (injuries, dislikes) — set by the AI personalizer or the user. */
+  avoidExerciseIds?: string[];
+  /** Movement patterns to give an extra set (e.g. "biceps" for "bigger arms"). */
+  focusPatterns?: MovementPattern[];
+  /** The user's own words, kept so the plan can be re-personalized later. */
+  goalDescription?: string;
+  /** Short AI-written explanation of the plan, shown above the progression notes. */
+  coachNote?: string;
+}
+
+/** Strength-leaning first; used to decide which goal drives which part of a session. */
+export const GOAL_PRIORITY: FitnessGoal[] = ["getStronger", "buildMuscle", "generalFitness", "loseFat"];
+
+export const MIN_SESSION_MINUTES = 20;
+export const MAX_SESSION_MINUTES = 150;
+
+/** Default session length so users don't have to guess. */
+export function recommendedSessionMinutes(goals: FitnessGoal[], experience: Experience): number {
+  const base = experience === "beginner" ? 45 : experience === "intermediate" ? 60 : 75;
+  const conditioningOnly = goals.length > 0 && goals.every((g) => g === "generalFitness" || g === "loseFat");
+  return conditioningOnly ? Math.max(30, base - 15) : base;
 }
 
 export interface Exercise {

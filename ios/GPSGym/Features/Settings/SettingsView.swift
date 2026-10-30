@@ -80,7 +80,8 @@ struct SettingsView: View {
                     HStack {
                         Text("Training preferences")
                         Spacer()
-                        Text("\(setup.profile.goal.title) · \(setup.profile.trainingDays.count)×/wk")
+                        Text("\(FitnessGoal.priority.filter(setup.profile.goals.contains).map(\.title).joined(separator: ", ")) · \(setup.profile.trainingDays.count)×/wk")
+                            .lineLimit(1)
                             .foregroundStyle(Theme.secondaryText)
                     }
                 }
@@ -171,8 +172,16 @@ private struct EditTrainingView: View {
         NavigationStack {
             Form {
                 if let binding = Binding($profile) {
-                    Picker("Goal", selection: binding.goal) {
-                        ForEach(FitnessGoal.allCases) { Text($0.title).tag($0) }
+                    Section("Goals (select all that apply)") {
+                        ForEach(FitnessGoal.allCases) { goal in
+                            Toggle(goal.title, isOn: Binding(
+                                get: { binding.wrappedValue.goals.contains(goal) },
+                                set: { isOn in
+                                    if isOn { binding.wrappedValue.goals.insert(goal) } else { binding.wrappedValue.goals.remove(goal) }
+                                }
+                            ))
+                            .tint(Theme.accent)
+                        }
                     }
                     Picker("Experience", selection: binding.experience) {
                         ForEach(Experience.allCases) { Text($0.title).tag($0) }
@@ -183,8 +192,16 @@ private struct EditTrainingView: View {
                     Picker("Equipment", selection: binding.equipment) {
                         ForEach(Equipment.allCases) { Text($0.title).tag($0) }
                     }
-                    Picker("Session length", selection: binding.sessionMinutes) {
-                        ForEach(TrainingProfile.sessionLengthOptions, id: \.self) { Text("\($0) min").tag($0) }
+                    Stepper(
+                        "Session length: \(binding.wrappedValue.sessionMinutes) min",
+                        value: binding.sessionMinutes,
+                        in: TrainingProfile.minSessionMinutes...TrainingProfile.maxSessionMinutes,
+                        step: 5
+                    )
+                    Button("Use recommended (\(TrainingProfile.recommendedSessionMinutes(goals: binding.wrappedValue.goals, experience: binding.wrappedValue.experience)) min)") {
+                        binding.wrappedValue.sessionMinutes = TrainingProfile.recommendedSessionMinutes(
+                            goals: binding.wrappedValue.goals, experience: binding.wrappedValue.experience
+                        )
                     }
                     Section("Training days") {
                         WeekdayPicker(selection: binding.trainingDays)
@@ -203,7 +220,7 @@ private struct EditTrainingView: View {
                         if let profile { app.updateProfile(profile) }
                         dismiss()
                     }
-                    .disabled(profile?.trainingDays.isEmpty ?? true)
+                    .disabled(profile?.trainingDays.isEmpty ?? true || profile?.goals.isEmpty ?? true)
                 }
             }
         }

@@ -1,3 +1,4 @@
+import GPSGymCore
 import SwiftUI
 
 enum Theme {
@@ -128,4 +129,47 @@ func formatDuration(_ interval: TimeInterval) -> String {
     return hours > 0
         ? String(format: "%d:%02d:%02d", hours, minutes, seconds)
         : String(format: "%d:%02d", minutes, seconds)
+}
+
+/// Shows the recommended session length; "Don't like it?" reveals a custom entry.
+struct SessionLengthPicker: View {
+    let recommended: Int
+    @Binding var custom: Int?
+    @State private var text = ""
+
+    var body: some View {
+        Card {
+            if custom == nil {
+                Text("Session length").font(.caption).foregroundStyle(Theme.secondaryText)
+                HStack {
+                    Label("\(recommended) min", systemImage: "timer").font(.title2.weight(.bold))
+                    StatusPill(text: "Recommended", color: Theme.accent)
+                }
+                Text("Based on your goals and experience.").font(.caption).foregroundStyle(Theme.secondaryText)
+                Button("Don't like the length? Enter your own") {
+                    text = String(recommended)
+                    custom = recommended
+                }
+                .font(.subheadline.weight(.semibold))
+            } else {
+                Text("Your session length (minutes)").font(.caption).foregroundStyle(Theme.secondaryText)
+                TextField("Minutes", text: $text)
+                    .keyboardType(.numberPad)
+                    .font(.title2.weight(.bold).monospacedDigit())
+                    .onChange(of: text) {
+                        if let n = Int(text), (TrainingProfile.minSessionMinutes...TrainingProfile.maxSessionMinutes).contains(n) {
+                            custom = n
+                        }
+                    }
+                if let n = Int(text), !(TrainingProfile.minSessionMinutes...TrainingProfile.maxSessionMinutes).contains(n) {
+                    Text("Pick \(TrainingProfile.minSessionMinutes)–\(TrainingProfile.maxSessionMinutes) minutes.")
+                        .font(.caption).foregroundStyle(Theme.locked)
+                }
+                Button("Use recommended (\(recommended) min)") { custom = nil }
+                    .font(.subheadline)
+                    .foregroundStyle(Theme.secondaryText)
+            }
+        }
+        .onAppear { text = String(custom ?? recommended) }
+    }
 }

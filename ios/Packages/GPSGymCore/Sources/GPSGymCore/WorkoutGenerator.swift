@@ -121,9 +121,21 @@ public enum WorkoutGenerator {
         var restSeconds: Int
     }
 
-    static func prescription(goal: FitnessGoal, role: SlotRole, experience: Experience) -> Prescription {
+    /// With several goals, the most strength-leaning one drives the main lifts, the most
+    /// conditioning-leaning one drives accessories, and the middle one drives secondaries.
+    public static func goal(for role: SlotRole, goals: Set<FitnessGoal>) -> FitnessGoal {
+        let sorted = FitnessGoal.priority.filter(goals.contains)
+        guard let first = sorted.first, let last = sorted.last else { return .buildMuscle }
+        switch role {
+        case .primary: return first
+        case .accessory: return last
+        case .secondary: return sorted[(sorted.count - 1) / 2]
+        }
+    }
+
+    static func prescription(goals: Set<FitnessGoal>, role: SlotRole, experience: Experience) -> Prescription {
         var p: Prescription
-        switch (goal, role) {
+        switch (goal(for: role, goals: goals), role) {
         case (.getStronger, .primary): p = .init(sets: 4, repsLow: 3, repsHigh: 5, restSeconds: 180)
         case (.getStronger, .secondary): p = .init(sets: 3, repsLow: 6, repsHigh: 8, restSeconds: 120)
         case (.getStronger, .accessory): p = .init(sets: 2, repsLow: 8, repsHigh: 12, restSeconds: 75)
@@ -171,12 +183,13 @@ public enum WorkoutGenerator {
 
         for slot in template.slots {
             let candidates = ExerciseLibrary.candidates(for: slot.pattern, equipment: profile.equipment)
-                .filter { !used.contains($0.id) }
+                .filter { !used.contains($0.id) && !profile.avoidExerciseIDs.contains($0.id) }
             guard !candidates.isEmpty else { continue }
             let exercise = candidates[slot.variant % candidates.count]
             used.insert(exercise.id)
 
-            var p = prescription(goal: profile.goal, role: slot.role, experience: profile.experience)
+            var p = prescription(goals: profile.goals, role: slot.role, experience: profile.experience)
+            if profile.focusPatterns.contains(slot.pattern) { p.sets += 1 }
             if exercise.isBodyweight {
                 // Bodyweight work needs higher reps to be a meaningful stimulus.
                 p.repsLow = max(p.repsLow, 8)
@@ -235,9 +248,10 @@ public enum WorkoutGenerator {
         if profile.equipment == .bodyweight {
             notes.append("Bodyweight moves: progress by adding reps, slowing the lowering phase to 3 seconds, or switching to the harder variation.")
         }
-        if profile.goal == .loseFat {
+        if profile.goals.contains(.loseFat) {
             notes.append("Lifting helps preserve muscle; fat loss is driven mostly by nutrition and daily activity.")
         }
+        if let coachNote = profile.coachNote, !coachNote.isEmpty { notes.insert(coachNote, at: 0) }
         notes.append("This is a general program, not medical advice. Results vary — stop and consult a professional if anything hurts.")
         return notes
     }

@@ -3,6 +3,9 @@ import Foundation
 public enum FitnessGoal: String, Codable, CaseIterable, Identifiable, Sendable {
     case buildMuscle, getStronger, generalFitness, loseFat
 
+    /// Strength-leaning first; decides which goal drives which part of a session.
+    public static let priority: [FitnessGoal] = [.getStronger, .buildMuscle, .generalFitness, .loseFat]
+
     public var id: String { rawValue }
 
     public var title: String {
@@ -95,35 +98,67 @@ public enum Weekday: Int, Codable, CaseIterable, Identifiable, Comparable, Senda
 
 /// Everything onboarding collects that affects the program.
 public struct TrainingProfile: Codable, Equatable, Sendable {
-    public var goal: FitnessGoal
+    /// One or more goals. Empty falls back to build muscle.
+    public var goals: Set<FitnessGoal>
     public var experience: Experience
     public var equipment: Equipment
     public var mode: WorkoutMode
     public var trainingDays: Set<Weekday>
     public var sessionMinutes: Int
+    /// Exercises to leave out (injuries, dislikes) — from AI personalization or the user.
+    public var avoidExerciseIDs: Set<String>
+    /// Movement patterns that get one extra set.
+    public var focusPatterns: Set<MovementPattern>
+    /// The user's goal in their own words.
+    public var goalDescription: String?
+    /// Short AI-written explanation, shown first in the progression notes.
+    public var coachNote: String?
 
     public init(
-        goal: FitnessGoal,
+        goals: Set<FitnessGoal>,
         experience: Experience,
         equipment: Equipment,
         mode: WorkoutMode,
         trainingDays: Set<Weekday>,
-        sessionMinutes: Int
+        sessionMinutes: Int,
+        avoidExerciseIDs: Set<String> = [],
+        focusPatterns: Set<MovementPattern> = [],
+        goalDescription: String? = nil,
+        coachNote: String? = nil
     ) {
-        self.goal = goal
+        self.goals = goals
         self.experience = experience
         self.equipment = equipment
         self.mode = mode
         self.trainingDays = trainingDays
         self.sessionMinutes = sessionMinutes
+        self.avoidExerciseIDs = avoidExerciseIDs
+        self.focusPatterns = focusPatterns
+        self.goalDescription = goalDescription
+        self.coachNote = coachNote
     }
 
     /// At least one rest day is required, so the max is 6.
     public static let maxTrainingDays = 6
+    /// Quick picks; any value in min...max is allowed.
     public static let sessionLengthOptions = [30, 45, 60, 75, 90]
+    public static let minSessionMinutes = 20
+    public static let maxSessionMinutes = 150
+
+    /// Default session length so users don't have to guess.
+    public static func recommendedSessionMinutes(goals: Set<FitnessGoal>, experience: Experience) -> Int {
+        let base: Int
+        switch experience {
+        case .beginner: base = 45
+        case .intermediate: base = 60
+        case .advanced: base = 75
+        }
+        let conditioningOnly = !goals.isEmpty && goals.isSubset(of: [.generalFitness, .loseFat])
+        return conditioningOnly ? max(30, base - 15) : base
+    }
 }
 
-public enum MovementPattern: String, Codable, Sendable {
+public enum MovementPattern: String, Codable, CaseIterable, Sendable {
     case squat, hinge, lunge
     case horizontalPush, verticalPush, horizontalPull, verticalPull
     case shoulderIsolation, biceps, triceps, calves, core

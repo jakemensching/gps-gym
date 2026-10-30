@@ -3,6 +3,7 @@ import {
   isBodyweight, sortWeekdays,
   type Experience, type FitnessGoal, type MovementPattern, type PlannedExercise,
   type SlotRole, type TrainingPlan, type TrainingProfile, type WorkoutDay,
+  GOAL_PRIORITY,
 } from "./types";
 
 // Mirrors WorkoutGenerator.swift. Deterministic: same profile → same plan.
@@ -71,8 +72,20 @@ const TABLE: Record<FitnessGoal, Record<SlotRole, [number, number, number, numbe
   loseFat: { primary: [3, 8, 12, 75], secondary: [3, 10, 15, 60], accessory: [2, 12, 15, 45] },
 };
 
-export function prescriptionFor(goal: FitnessGoal, role: SlotRole, experience: Experience): Prescription {
-  const [sets, repsLow, repsHigh, restSeconds] = TABLE[goal][role];
+/**
+ * With several goals, the most strength-leaning one drives the main lifts, the most
+ * conditioning-leaning one drives accessories, and the middle one drives secondaries.
+ */
+export function goalForRole(goals: FitnessGoal[], role: SlotRole): FitnessGoal {
+  const sorted = GOAL_PRIORITY.filter((g) => goals.includes(g));
+  if (sorted.length === 0) return "buildMuscle";
+  if (role === "primary") return sorted[0];
+  if (role === "accessory") return sorted[sorted.length - 1];
+  return sorted[Math.floor((sorted.length - 1) / 2)];
+}
+
+export function prescriptionFor(goals: FitnessGoal[], role: SlotRole, experience: Experience): Prescription {
+  const [sets, repsLow, repsHigh, restSeconds] = TABLE[goalForRole(goals, role)][role];
   const p = { sets, repsLow, repsHigh, restSeconds };
   if (experience === "beginner" && role !== "accessory") p.sets = Math.max(2, p.sets - 1);
   if (experience === "advanced" && role === "primary") p.sets += 1;
@@ -117,11 +130,13 @@ function buildDay(template: DayTemplate, profile: TrainingProfile): WorkoutDay {
   const used = new Set<string>();
   const exercises: PlannedExercise[] = [];
   for (const slot of template.slots) {
-    const options = candidates(slot.pattern, profile.equipment).filter((e) => !used.has(e.id));
+    const avoid = profile.avoidExerciseIds ?? [];
+    const options = candidates(slot.pattern, profile.equipment).filter((e) => !used.has(e.id) && !avoid.includes(e.id));
     if (options.length === 0) continue;
     const exercise = options[(slot.variant ?? 0) % options.length];
     used.add(exercise.id);
-    const p = prescriptionFor(profile.goal, slot.role, profile.experience);
+    const p = prescriptionFor(profile.goals, slot.role, profile.experience);
+    if (profile.focusPatterns?.includes(slot.pattern)) p.sets += 1;
     if (isBodyweight(exercise)) {
       p.repsLow = Math.max(p.repsLow, 8);
       p.repsHigh = Math.max(p.repsHigh, 15);
@@ -141,9 +156,10 @@ function progressionNotes(profile: TrainingProfile): string[] {
   if (profile.equipment === "bodyweight") {
     notes.push("Bodyweight moves: progress by adding reps, slowing the lowering phase to 3 seconds, or switching to the harder variation.");
   }
-  if (profile.goal === "loseFat") {
+  if (profile.goals.includes("loseFat")) {
     notes.push("Lifting helps preserve muscle; fat loss is driven mostly by nutrition and daily activity.");
   }
+  if (profile.coachNote) notes.unshift(profile.coachNote);
   notes.push("This is a general program, not medical advice. Results vary — stop and consult a professional if anything hurts.");
   return notes;
 }

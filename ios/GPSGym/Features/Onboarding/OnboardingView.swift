@@ -10,18 +10,28 @@ struct OnboardingView: View {
     }
 
     @State private var step: Step = .welcome
-    @State private var goal: FitnessGoal = .buildMuscle
+    @State private var goals: Set<FitnessGoal> = [.buildMuscle]
+    @State private var goalDescription = ""
     @State private var experience: Experience = .beginner
     @State private var days: Set<Weekday> = [.monday, .wednesday, .friday]
-    @State private var minutes = 60
+    @State private var customMinutes: Int?
     @State private var mode: WorkoutMode = .gym
     @State private var equipment: Equipment = .fullGym
     @State private var gym: GymLocation?
     @State private var selection = FamilyActivitySelection()
     @State private var enforceToday = false
 
+    private var effectiveGoals: Set<FitnessGoal> { goals.isEmpty ? [.buildMuscle] : goals }
+    private var recommendedMinutes: Int {
+        TrainingProfile.recommendedSessionMinutes(goals: effectiveGoals, experience: experience)
+    }
+
     private var profile: TrainingProfile {
-        TrainingProfile(goal: goal, experience: experience, equipment: equipment, mode: mode, trainingDays: days, sessionMinutes: minutes)
+        let description = goalDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+        return TrainingProfile(
+            goals: effectiveGoals, experience: experience, equipment: equipment, mode: mode, trainingDays: days,
+            sessionMinutes: customMinutes ?? recommendedMinutes, goalDescription: description.isEmpty ? nil : description
+        )
     }
 
     var body: some View {
@@ -85,6 +95,7 @@ struct OnboardingView: View {
 
     private var canContinue: Bool {
         switch step {
+        case .goal: return !goals.isEmpty || !goalDescription.trimmingCharacters(in: .whitespaces).isEmpty
         case .schedule: return !days.isEmpty
         case .gym: return gym != nil
         default: return true
@@ -143,10 +154,19 @@ struct OnboardingView: View {
 
     private var goalStep: some View {
         VStack(alignment: .leading, spacing: 12) {
-            title("What's your main goal?")
+            title("What are your goals?", "Select all that apply.")
             ForEach(FitnessGoal.allCases) { option in
-                OptionRow(title: option.title, systemImage: icon(for: option), isSelected: goal == option) { goal = option }
+                OptionRow(title: option.title, systemImage: icon(for: option), isSelected: goals.contains(option)) {
+                    if goals.contains(option) { goals.remove(option) } else { goals.insert(option) }
+                }
             }
+            Text("Or describe it in your own words").font(.headline).padding(.top, 8)
+            TextField("e.g. Gain 5 lbs of muscle in 2 months. Bad left knee.", text: $goalDescription, axis: .vertical)
+                .lineLimit(2...5)
+                .padding(14)
+                .background(Theme.card, in: RoundedRectangle(cornerRadius: 14))
+            Text("We'll save this. AI personalization is coming to the iPhone app soon — for now your plan uses the goals above.")
+                .font(.caption).foregroundStyle(Theme.secondaryText)
         }
     }
 
@@ -176,11 +196,7 @@ struct OnboardingView: View {
                 Text("Heads up: 3–4 days is plenty when you're starting out — and easier to stick with.")
                     .font(.footnote).foregroundStyle(Theme.locked)
             }
-            Text("Session length").font(.headline)
-            Picker("Session length", selection: $minutes) {
-                ForEach(TrainingProfile.sessionLengthOptions, id: \.self) { Text("\($0) min").tag($0) }
-            }
-            .pickerStyle(.segmented)
+            SessionLengthPicker(recommended: recommendedMinutes, custom: $customMinutes)
         }
     }
 

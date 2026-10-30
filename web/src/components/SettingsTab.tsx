@@ -1,17 +1,41 @@
 "use client";
 
 import { useState } from "react";
-import { EQUIPMENT, EXPERIENCE, GOALS, SESSION_LENGTHS, type TrainingProfile } from "@/lib/core/types";
+import { EQUIPMENT, EXPERIENCE, GOALS, recommendedSessionMinutes, type TrainingProfile } from "@/lib/core/types";
+import { AI_ENABLED, personalize } from "@/lib/personalize";
 import { exportData, resetEverything, updateGym, updateProfile, type AppState, type GymLocation } from "@/lib/store";
 import { GymPicker } from "./GymPicker";
-import { Modal, Segmented, WeekdayPicker } from "./ui";
+import { Modal, Segmented, SessionLengthPicker, WeekdayPicker } from "./ui";
 
 export function SettingsTab({ state }: { state: AppState }) {
   const [profile, setProfile] = useState<TrainingProfile>(state.profile);
   const [gym, setGym] = useState<GymLocation | null>(state.gym);
   const [confirmReset, setConfirmReset] = useState(false);
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiMessage, setAiMessage] = useState<string | null>(null);
   const dirty = JSON.stringify(profile) !== JSON.stringify(state.profile);
   const set = <K extends keyof TrainingProfile>(key: K, value: TrainingProfile[K]) => setProfile({ ...profile, [key]: value });
+
+  async function rePersonalize() {
+    if (!profile.goalDescription?.trim()) return;
+    setAiBusy(true);
+    setAiMessage(null);
+    try {
+      const r = await personalize(profile.goalDescription, profile);
+      setProfile({
+        ...profile,
+        goals: [...new Set([...profile.goals, ...r.goals])],
+        avoidExerciseIds: r.avoidExerciseIds,
+        focusPatterns: r.focusPatterns,
+        coachNote: r.coachNote || undefined,
+      });
+      setAiMessage("Done — review and tap “Save & regenerate plan”.");
+    } catch (e) {
+      setAiMessage(e instanceof Error ? e.message : "AI personalization failed.");
+    } finally {
+      setAiBusy(false);
+    }
+  }
 
   function download() {
     const blob = new Blob([exportData()], { type: "application/json" });
@@ -36,12 +60,31 @@ export function SettingsTab({ state }: { state: AppState }) {
 
       <div className="card">
         <strong>Training</strong>
+        <span className="small muted">Goals (select all that apply)</span>
+        <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
+          {GOALS.map((g) => {
+            const on = profile.goals.includes(g.id);
+            return (
+              <button key={g.id} type="button" className={`pill ${on ? "good" : ""}`} aria-pressed={on}
+                style={{ border: 0, cursor: "pointer", fontSize: 14, padding: "8px 12px" }}
+                onClick={() => set("goals", on ? profile.goals.filter((x) => x !== g.id) : [...profile.goals, g.id])}>
+                {on ? "✓ " : ""}{g.title}
+              </button>
+            );
+          })}
+        </div>
         <label className="field">
-          <span className="small muted">Goal</span>
-          <select className="text" value={profile.goal} onChange={(e) => set("goal", e.target.value as TrainingProfile["goal"])}>
-            {GOALS.map((g) => <option key={g.id} value={g.id}>{g.title}</option>)}
-          </select>
+          <span className="small muted">Your goal in your own words</span>
+          <textarea className="text" rows={2} maxLength={600} value={profile.goalDescription ?? ""}
+            placeholder="e.g. Bigger arms, bad left knee"
+            onChange={(e) => set("goalDescription", e.target.value || undefined)} />
         </label>
+        {AI_ENABLED && (
+          <button type="button" className="btn btn-secondary" disabled={aiBusy || !profile.goalDescription?.trim()} onClick={rePersonalize}>
+            {aiBusy ? "Personalizing…" : "✨ Personalize with AI"}
+          </button>
+        )}
+        {aiMessage && <span className="small muted">{aiMessage}</span>}
         <label className="field">
           <span className="small muted">Experience</span>
           <select className="text" value={profile.experience} onChange={(e) => set("experience", e.target.value as TrainingProfile["experience"])}>
@@ -57,12 +100,14 @@ export function SettingsTab({ state }: { state: AppState }) {
         <span className="small muted">Where</span>
         <Segmented label="Where" value={profile.mode} onChange={(v) => set("mode", v)}
           options={[{ value: "gym", label: "Gym" }, { value: "home", label: "Home" }]} />
-        <span className="small muted">Session length</span>
-        <Segmented label="Session length" value={profile.sessionMinutes} onChange={(v) => set("sessionMinutes", v)}
-          options={SESSION_LENGTHS.map((m) => ({ value: m, label: `${m}` }))} />
+        <SessionLengthPicker
+          recommended={recommendedSessionMinutes(profile.goals, profile.experience)}
+          custom={profile.sessionMinutes === recommendedSessionMinutes(profile.goals, profile.experience) ? null : profile.sessionMinutes}
+          onChange={(m) => set("sessionMinutes", m ?? recommendedSessionMinutes(profile.goals, profile.experience))}
+        />
         <span className="small muted">Training days</span>
         <WeekdayPicker value={profile.trainingDays} onChange={(v) => set("trainingDays", v)} />
-        <button className="btn btn-primary" disabled={!dirty || profile.trainingDays.length === 0} onClick={() => updateProfile(profile)}>
+        <button className="btn btn-primary" disabled={!dirty || profile.trainingDays.length === 0 || profile.goals.length === 0} onClick={() => updateProfile(profile)}>
           Save & regenerate plan
         </button>
         <span className="small muted">Your workout history is kept.</span>
