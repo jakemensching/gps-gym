@@ -6,6 +6,10 @@ Two forms, one product:
 - **iPhone app** (`ios/`, SwiftUI) — the full experience, including Screen Time app blocking.
 - **Web app** (`web/`, Next.js) — plan, workout logging, progress. No app blocking (browsers can't do that).
 
+## Live web app
+https://jakemensching.github.io/gps-gym/ — deployed by `.github/workflows/pages.yml` on every push that touches `web/`
+(Settings → Pages → Source must be **GitHub Actions**).
+
 ## Run the web app (any computer)
 ```bash
 cd web
