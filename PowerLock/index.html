@@ -1,0 +1,1034 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<title>PowerLock Prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* PowerLock "Ion" design tokens (mirrors PowerLock/Design/Tokens.swift). Dark only. */
+:root{
+  --bg:#000; --surface:#0F1013; --sunken:#1A1B20; --track:#1D1E24; --hair:rgba(255,255,255,.08);
+  --accent:#2F6FEB; --glow:#8DB0F4; --wash:rgba(47,111,235,.16);
+  --label:#F4F5F7; --sec:#8E939C; --ter:#575B63; --danger:#FF5A52;
+  --r-s:10px; --r-m:16px; --r-l:24px; --r-xl:28px;
+  --font:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display","Inter",system-ui,sans-serif;
+  color-scheme:dark;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%}
+body{background:#050607;color:var(--label);font-family:var(--font);-webkit-font-smoothing:antialiased;overflow:hidden}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer;text-align:inherit}
+input,textarea{font:inherit;color:inherit}
+svg.i{width:1em;height:1em;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+
+/* ---------- Page layout: screen list + phone ---------- */
+.stage{display:flex;height:100%;align-items:center;justify-content:center;gap:56px;padding:24px}
+.side{width:280px;max-height:calc(100vh - 48px);overflow:auto;padding-right:6px}
+.side h1{font-size:22px;font-weight:600;margin:0 0 4px;display:flex;align-items:center;gap:10px}
+.side p.lead{color:var(--sec);font-size:13px;line-height:1.45;margin:0 0 18px}
+.side h2{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ter);font-weight:600;margin:18px 0 6px}
+.side .nav{display:flex;flex-direction:column;gap:1px}
+.side .nav button{font-size:14px;color:var(--sec);padding:6px 10px;border-radius:8px}
+.side .nav button:hover{background:var(--surface);color:var(--label)}
+.side .nav button.on{background:var(--wash);color:var(--glow)}
+.side .tip{font-size:12px;color:var(--ter);line-height:1.5;margin-top:18px}
+.phone{position:relative;width:390px;height:844px;max-height:calc(100vh - 48px);border-radius:56px;background:var(--bg);
+  box-shadow:0 0 0 11px #121316,0 0 0 12px #2a2c31,0 40px 120px rgba(0,0,0,.6);overflow:hidden;flex:none}
+.island{position:absolute;top:11px;left:50%;transform:translateX(-50%);width:122px;height:35px;background:#000;border-radius:20px;z-index:60}
+.status{position:absolute;top:0;left:0;right:0;height:54px;display:flex;align-items:center;justify-content:space-between;padding:6px 34px 0 46px;font-size:17px;font-weight:600;z-index:55;pointer-events:none}
+.status .r{display:flex;gap:6px;align-items:center}
+.homebar{position:absolute;bottom:8px;left:50%;transform:translateX(-50%);width:136px;height:5px;border-radius:3px;background:rgba(255,255,255,.85);z-index:80;pointer-events:none}
+#app{position:absolute;inset:0}
+.menu-btn{display:none}
+@media (max-width:760px){
+  .stage{padding:0;gap:0}
+  .side{display:none;position:fixed;inset:0;width:auto;max-height:none;background:rgba(0,0,0,.94);z-index:200;padding:56px 22px 40px;backdrop-filter:blur(10px)}
+  .side.open{display:block}
+  .phone{width:100%;height:100%;max-height:none;border-radius:0;box-shadow:none}
+  .island,.status,.homebar{display:none}
+  .menu-btn{display:flex;position:fixed;right:12px;top:calc(10px + env(safe-area-inset-top));z-index:150;align-items:center;gap:6px;
+    font-size:12px;font-weight:600;color:var(--sec);background:rgba(26,27,32,.9);border:1px solid var(--hair);border-radius:99px;padding:7px 12px}
+  .side .close{display:block}
+}
+.side .close{display:none;position:absolute;top:14px;right:16px;font-size:15px;color:var(--glow)}
+
+/* ---------- Screen scaffolding ---------- */
+.view{position:absolute;inset:0;display:flex;flex-direction:column;background:var(--bg)}
+.scroll{flex:1;overflow-y:auto;overflow-x:hidden;padding:0 20px;scrollbar-width:none}
+.scroll::-webkit-scrollbar{display:none}
+.pad-top{height:58px;flex:none}
+@media (max-width:760px){.pad-top{height:calc(env(safe-area-inset-top) + 12px)}}
+.foot{flex:none;padding:12px 20px 34px;background:linear-gradient(to bottom,rgba(0,0,0,0),#000 22%)}
+.foot .note{text-align:center;color:var(--sec);font-size:13px;margin-top:10px;line-height:1.4}
+
+/* type */
+.t-display{font-size:34px;line-height:41px;font-weight:700;letter-spacing:.2px;margin:0}
+.t-title{font-size:28px;line-height:34px;font-weight:600;margin:0}
+.t-heading{font-size:20px;line-height:25px;font-weight:600;margin:0}
+.t-head{font-size:17px;line-height:22px;font-weight:600}
+.t-sub{font-size:15px;line-height:20px;color:var(--sec)}
+.t-foot{font-size:13px;line-height:18px;color:var(--sec)}
+.over{font-size:12px;font-weight:500;text-transform:uppercase;letter-spacing:.6px;color:var(--sec)}
+.stat{font-weight:200;font-size:34px;line-height:40px;font-variant-numeric:tabular-nums}
+.glow{color:var(--glow)} .sec{color:var(--sec)} .ter{color:var(--ter)}
+
+/* components */
+.card{background:var(--surface);border:1px solid var(--hair);border-radius:var(--r-l);padding:20px}
+.group{background:var(--surface);border:1px solid var(--hair);border-radius:var(--r-l);overflow:hidden}
+.hair{height:1px;background:var(--hair)}
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:54px;border-radius:99px;font-size:17px;font-weight:600;text-align:center;padding:0 16px;transition:transform .15s,opacity .15s}
+.btn:active{transform:scale(.98);opacity:.85}
+.btn.primary{background:var(--accent);color:#fff}
+.btn.secondary{background:var(--sunken);color:var(--label)}
+.btn.onaccent{background:#fff;color:var(--accent)}
+.btn.quiet{min-height:44px;color:var(--glow)}
+.btn.danger{min-height:44px;color:var(--danger)}
+.btn:disabled{opacity:.5;pointer-events:none}
+.btn.primary:disabled{background:#1d3f86;opacity:1;color:rgba(255,255,255,.55)}
+.icotile{width:36px;height:36px;border-radius:50%;background:var(--sunken);display:grid;place-items:center;font-size:16px;flex:none}
+.icotile.wash{background:var(--wash);color:var(--glow)}
+.pill{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:600;padding:5px 12px;border-radius:99px;background:var(--sunken);color:var(--sec)}
+.pill.accent{background:var(--accent);color:#fff}
+.pill.glow{background:var(--wash);color:var(--glow)}
+.mark{width:24px;height:24px;flex:none;border-radius:50%;border:1.6px solid var(--ter);display:grid;place-items:center}
+.mark.on{background:var(--accent);border-color:var(--accent);color:#fff;font-size:14px}
+.opt{display:flex;align-items:center;gap:16px;width:100%;padding:16px 18px;min-height:60px;position:relative}
+.opt + .opt::before{content:"";position:absolute;top:0;left:18px;right:0;height:1px;background:var(--hair)}
+.opt.has-ic + .opt.has-ic::before{left:62px}
+.opt.sel{background:var(--wash)}
+.opt .oic{width:28px;font-size:20px;color:var(--sec);display:grid;place-items:center}
+.opt.sel .oic{color:var(--glow)}
+.opt .otx{flex:1;display:flex;flex-direction:column;gap:2px}
+.opt .otx b{font-size:17px;font-weight:600;line-height:22px}
+.opt .otx small{font-size:15px;color:var(--sec);line-height:20px}
+.chips{display:flex;gap:8px}
+.chips button{flex:1;min-height:48px;border-radius:99px;background:var(--sunken);font-size:17px;font-weight:600;text-align:center}
+.chips button.on{background:var(--accent);color:#fff}
+.stack{display:flex;flex-direction:column}
+.g8{gap:8px}.g12{gap:12px}.g16{gap:16px}.g20{gap:20px}.g24{gap:24px}
+.row{display:flex;align-items:center}
+.between{justify-content:space-between}
+.mt8{margin-top:8px}.mt12{margin-top:12px}.mt16{margin-top:16px}.mt20{margin-top:20px}.mt24{margin-top:24px}
+.toggle{width:51px;height:31px;border-radius:99px;background:#39393d;position:relative;flex:none;transition:background .2s}
+.toggle::after{content:"";position:absolute;top:2px;left:2px;width:27px;height:27px;border-radius:50%;background:#fff;transition:transform .2s}
+.toggle.on{background:var(--accent)} .toggle.on::after{transform:translateX(20px)}
+.toast{position:absolute;left:20px;right:20px;bottom:110px;z-index:120;background:rgba(26,27,32,.96);border:1px solid var(--hair);border-radius:16px;padding:14px 16px;font-size:14px;line-height:1.4;color:var(--label);animation:toast 2.6s ease forwards;pointer-events:none}
+@keyframes toast{0%{opacity:0;transform:translateY(8px)}8%,85%{opacity:1;transform:none}100%{opacity:0}}
+
+/* onboarding header */
+.onb-head{display:flex;align-items:center;gap:14px;height:44px;padding:0 20px;flex:none}
+.onb-head .back{width:28px;height:44px;display:grid;place-items:center;color:var(--glow);font-size:22px;margin-left:-4px}
+.prog{flex:1;height:4px;border-radius:99px;background:var(--track);overflow:hidden;margin:0 24px 0 8px}
+.prog i{display:block;height:100%;background:var(--glow);border-radius:99px;transition:width .35s ease}
+.pagetitle{margin:16px 0 20px}
+.pagetitle h1{font-size:28px;line-height:34px;font-weight:600;margin:0}
+.pagetitle p{font-size:17px;line-height:22px;color:var(--sec);margin:6px 0 0}
+
+/* Today */
+.topbar{display:flex;justify-content:flex-end;height:44px;align-items:center}
+.circlebtn{width:44px;height:44px;border-radius:50%;background:var(--sunken);border:1px solid var(--hair);display:grid;place-items:center;font-size:20px}
+.hero{border-radius:var(--r-xl);padding:20px}
+.hero.blue{background:var(--accent);border:0}
+.hero.blue .sec{color:rgba(255,255,255,.82)}
+.hero.blue .hair{background:rgba(255,255,255,.28)}
+.stat3{display:grid;grid-template-columns:repeat(3,1fr);border-top:1px solid var(--hair);border-bottom:1px solid var(--hair);padding:12px 0}
+.stat3 > div{padding:0 0 0 0;display:flex;flex-direction:column;gap:2px}
+.stat3 > div + div{border-left:1px solid var(--hair);padding-left:12px}
+.stat3 .v{font-size:28px;font-weight:300;line-height:34px;font-variant-numeric:tabular-nums}
+.stat3 .l{font-size:13px;color:var(--sec)}
+.weekstrip{display:grid;grid-template-columns:repeat(7,1fr);justify-items:center;gap:4px;margin-top:14px}
+.weekstrip span{font-size:12px;color:var(--sec);font-weight:500;margin-top:6px}
+.weekstrip span.today{color:var(--label);font-weight:700}
+.stat2{display:grid;grid-template-columns:1fr 1fr;padding:6px 4px}
+.stat2 > div + div{border-left:1px solid var(--hair);padding-left:18px}
+.stat2 .v{font-size:34px;font-weight:200;line-height:42px}
+.stat2 .v small{font-size:20px;color:var(--sec);font-weight:300}
+.stat2 .l{font-size:13px;color:var(--sec)}
+.tabbar{position:absolute;left:50%;bottom:26px;transform:translateX(-50%);display:flex;gap:2px;padding:4px;border-radius:99px;
+  background:rgba(22,23,27,.82);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border:1px solid rgba(255,255,255,.1);z-index:40}
+.tabbar button{width:92px;height:56px;border-radius:99px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:11px;font-weight:600;color:var(--label)}
+.tabbar button svg{font-size:22px}
+.tabbar button.on{background:rgba(255,255,255,.1);color:var(--glow)}
+.fade-bottom{position:absolute;left:0;right:0;bottom:0;height:120px;background:linear-gradient(to bottom,rgba(0,0,0,0),#000 70%);pointer-events:none;z-index:30}
+.secthead{display:flex;justify-content:space-between;align-items:baseline;margin:28px 0 12px}
+.secthead button{font-size:15px;color:var(--glow)}
+
+/* lists */
+.lrow{display:flex;align-items:center;gap:14px;padding:14px 16px;position:relative;width:100%}
+.lrow + .lrow::before{content:"";position:absolute;top:0;left:var(--inset,16px);right:0;height:1px;background:var(--hair)}
+.lrow .tx{flex:1;min-width:0}
+.lrow .tx b{display:block;font-size:17px;font-weight:600;line-height:22px}
+.lrow .tx small{display:block;font-size:15px;color:var(--sec);line-height:20px}
+.lrow .chev{color:var(--ter);font-size:15px}
+.numdot{width:28px;height:28px;border-radius:50%;background:var(--wash);color:var(--glow);display:grid;place-items:center;font-size:14px;font-weight:600;flex:none}
+.daypill{width:48px;text-align:center;font-size:13px;font-weight:600;padding:5px 0;border-radius:99px;background:var(--sunken);color:var(--sec);flex:none}
+.daypill.on{background:var(--wash);color:var(--glow)}
+
+/* session */
+.navbar{display:flex;align-items:center;height:52px;padding:0 16px;flex:none;position:relative}
+.navbar .ttl{position:absolute;left:0;right:0;text-align:center;font-size:17px;font-weight:600;pointer-events:none}
+.navbar .back{width:44px;height:44px;border-radius:50%;background:var(--sunken);border:1px solid var(--hair);display:grid;place-items:center;font-size:20px;z-index:1}
+.navbar .pillbtn{padding:0 16px;height:40px;border-radius:99px;background:var(--sunken);border:1px solid var(--hair);font-size:17px;color:var(--glow);z-index:1}
+.navbar .pillbtn.r{margin-left:auto;font-weight:600}
+.ringwrap{position:relative;width:300px;height:300px;margin:8px auto 0}
+.ringwrap svg{position:absolute;inset:0;transform:rotate(-90deg)}
+.ringwrap .mid{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.ringwrap .clock{font-size:76px;font-weight:100;letter-spacing:-1px;font-variant-numeric:tabular-nums;line-height:1}
+.verified-disc{position:absolute;inset:26px;border-radius:50%;background:var(--accent);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;animation:pop .6s cubic-bezier(.2,1.4,.4,1)}
+@keyframes pop{0%{transform:scale(.6);opacity:0}100%{transform:none;opacity:1}}
+.exrow{display:flex;gap:14px;align-items:center;padding:12px 16px;position:relative;width:100%}
+.exrow + .exrow::before{content:"";position:absolute;top:0;left:56px;right:0;height:1px;background:var(--hair)}
+.exrow b{font-size:17px;font-weight:600;display:block}
+.exrow.done b{text-decoration:line-through;color:var(--sec)}
+.exrow small{font-size:13px;color:var(--sec)}
+
+/* sheets */
+.sheet-bg{position:absolute;inset:0;background:rgba(0,0,0,.55);z-index:90;animation:fade .25s}
+.sheet{position:absolute;left:0;right:0;bottom:0;top:12px;background:#0b0c0e;border-radius:28px 28px 0 0;z-index:91;display:flex;flex-direction:column;animation:up .32s cubic-bezier(.2,.9,.3,1);border-top:1px solid var(--hair)}
+@media (min-width:761px){.sheet{top:50px}}
+@keyframes up{from{transform:translateY(100%)}to{transform:none}}
+@keyframes fade{from{opacity:0}}
+.grabber{width:36px;height:5px;border-radius:3px;background:#3a3b40;margin:6px auto 0}
+.textbox{width:100%;min-height:96px;resize:none;background:var(--surface);border:1px solid var(--hair);border-radius:var(--r-m);padding:14px 16px;font-size:17px;outline:none}
+.textbox:focus{border-color:var(--accent)}
+.textbox::placeholder{color:var(--ter)}
+.timepill{background:var(--sunken);border:0;border-radius:99px;padding:8px 14px;font-size:17px;color:var(--label);font-variant-numeric:tabular-nums;color-scheme:dark}
+.setgroup-title{font-size:20px;font-weight:600;margin:22px 4px 10px}
+.setnote{font-size:13px;color:var(--sec);line-height:18px;margin:8px 16px 0}
+.srow{display:flex;align-items:center;gap:16px;padding:0 16px;min-height:54px;position:relative;width:100%}
+.srow + .srow::before{content:"";position:absolute;top:0;left:58px;right:0;height:1px;background:var(--hair)}
+.srow .sic{width:26px;font-size:20px;display:grid;place-items:center}
+.srow .lbl{flex:1;font-size:17px}
+.srow .val{color:var(--sec);font-size:17px;display:flex;align-items:center;gap:6px}
+
+/* calendar */
+.cal{display:grid;grid-template-columns:repeat(7,1fr);row-gap:8px;justify-items:center;margin-top:14px}
+.cal .h{font-size:12px;color:var(--sec);font-weight:500}
+.cal .d{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;font-size:17px;color:var(--sec)}
+.cal .d.train{background:#121318;border:1px solid var(--hair);color:var(--label)}
+.cal .d.ver{background:var(--accent);color:#fff;border:0}
+.cal .d.em{border:1.5px dashed var(--glow);color:var(--label);background:none}
+.cal .d.today{border:2px solid var(--glow);color:var(--label);font-weight:600}
+.legend{display:flex;gap:18px;font-size:13px;color:var(--sec);margin-top:14px;padding-top:14px;border-top:1px solid var(--hair)}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:50%;margin-right:6px;vertical-align:-1px}
+
+/* calculating */
+.calc{background:linear-gradient(to bottom,#000 30%,#0f2350)}
+.typing{animation:fade .4s}
+.map{height:176px;border-radius:var(--r-l);overflow:hidden;border:1px solid var(--hair);position:relative;background:#1c2233}
+.brandtile{display:grid;place-items:center;background:var(--accent)}
+</style>
+</head>
+<body>
+<div class="stage">
+  <aside class="side" id="side">
+    <button class="close" data-act="closeMenu">Close</button>
+    <h1><span class="brandtile" style="width:30px;height:30px;border-radius:8px" id="sideLogo"></span>PowerLock</h1>
+    <p class="lead">Clickable HTML prototype of the iOS app as built (SwiftUI, Nov 2026). Tap through it like the real thing, or jump to any screen below.</p>
+    <div id="nav"></div>
+    <p class="tip">Prototype notes: the session clock runs 60× fast so you can see a full verify. GPS, Screen Time and payments are simulated. Nothing is saved.</p>
+  </aside>
+  <div class="phone" id="phone">
+    <div class="island"></div>
+    <div class="status"><span>9:41</span><span class="r">
+      <svg width="18" height="12" viewBox="0 0 18 12" fill="#fff"><rect x="0" y="8" width="3" height="4" rx="1"/><rect x="5" y="5.5" width="3" height="6.5" rx="1"/><rect x="10" y="3" width="3" height="9" rx="1"/><rect x="15" y="0" width="3" height="12" rx="1"/></svg>
+      <svg width="16" height="12" viewBox="0 0 16 12" fill="#fff"><path d="M8 2.2c2.4 0 4.6.9 6.2 2.4l1.2-1.3A10.6 10.6 0 0 0 8 .4 10.6 10.6 0 0 0 .6 3.3l1.2 1.3A8.8 8.8 0 0 1 8 2.2Zm0 3.6c1.4 0 2.7.5 3.6 1.4l1.3-1.3A7 7 0 0 0 8 4a7 7 0 0 0-4.9 1.9l1.3 1.3c.9-.9 2.2-1.4 3.6-1.4Zm0 3.5c-.6 0-1.2.3-1.6.7L8 11.6l1.6-1.6c-.4-.4-1-.7-1.6-.7Z"/></svg>
+      <svg width="27" height="13" viewBox="0 0 27 13"><rect x=".5" y=".5" width="23" height="12" rx="3.5" fill="none" stroke="rgba(255,255,255,.4)"/><rect x="2" y="2" width="20" height="9" rx="2" fill="#fff"/><rect x="25" y="4.5" width="1.5" height="4" rx=".7" fill="rgba(255,255,255,.4)"/></svg>
+    </span></div>
+    <div id="app"></div>
+    <div class="homebar"></div>
+  </div>
+</div>
+<button class="menu-btn" data-act="openMenu">Screens</button>
+
+<script>
+/* =====================================================================
+   Icons (stand-ins for the SF Symbols the app uses)
+   ===================================================================== */
+const svg = (d, extra='') => `<svg class="i" viewBox="0 0 24 24" ${extra}>${d}</svg>`;
+const F = 'fill="currentColor" stroke="none"';
+const I = {
+  lock: svg(`<rect x="5" y="10.5" width="14" height="10.5" rx="2.6" ${F}/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/>`),
+  lockOpen: svg(`<rect x="5" y="10.5" width="14" height="10.5" rx="2.6" ${F}/><path d="M8 10.5V8a4 4 0 0 1 7.6-1.8"/>`),
+  nav: svg(`<path d="M3.5 11 20.5 3.5 13 20.5 11 13Z" ${F}/>`),
+  dumbbell: svg(`<path d="M7 6.5v11M17 6.5v11M3.8 9.5v5M20.2 9.5v5M7 12h10" stroke-width="2.4"/>`),
+  chevL: svg(`<path d="M15 5l-7 7 7 7" stroke-width="2.4"/>`),
+  chevR: svg(`<path d="M9 5l7 7-7 7" stroke-width="2.4"/>`),
+  updown: svg(`<path d="M8 9.5l4-4 4 4M8 14.5l4 4 4-4"/>`),
+  flame: svg(`<path d="M12 2.5c1.2 3.6 5.5 5.6 5.5 10.6a5.5 5.5 0 0 1-11 0c0-2.7 1.6-4.4 2.7-5.4.3 1.8 1.1 2.8 2.2 3.3-.1-3.3-.6-6 .6-8.5Z" ${F}/>`),
+  flameO: svg(`<path d="M12 2.5c1.2 3.6 5.5 5.6 5.5 10.6a5.5 5.5 0 0 1-11 0c0-2.7 1.6-4.4 2.7-5.4.3 1.8 1.1 2.8 2.2 3.3-.1-3.3-.6-6 .6-8.5Z"/>`),
+  seal: svg(`<path d="M12 2.3l2.3 1.7 2.8-.2.9 2.7 2.4 1.5-.8 2.7.8 2.7-2.4 1.5-.9 2.7-2.8-.2L12 21.7l-2.3-1.7-2.8.2-.9-2.7-2.4-1.5.8-2.7-.8-2.7 2.4-1.5.9-2.7 2.8.2Z" ${F}/><path d="M8.6 12l2.3 2.3 4.5-4.6" stroke="#0F1013" stroke-width="2.2"/>`),
+  sliders: svg(`<path d="M4 7h9M19 7h1M4 12h3M11 12h9M4 17h11M19 17h1"/><circle cx="16" cy="7" r="2.3"/><circle cx="9" cy="12" r="2.3"/><circle cx="17" cy="17" r="2.3"/>`),
+  bell: svg(`<path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.6 1.8H4.4Z" ${F}/><path d="M10 20.6a2 2 0 0 0 4 0"/>`),
+  calendar: svg(`<rect x="3.5" y="4.5" width="17" height="16" rx="3"/><path d="M3.5 9h17M8 2.5v4M16 2.5v4"/><path d="M8 13h.01M12 13h.01M16 13h.01M8 16.8h.01M12 16.8h.01" stroke-width="2.6"/>`),
+  calCheck: svg(`<rect x="3" y="4.5" width="15" height="14" rx="3"/><path d="M3 9h15M7 2.5v4M14 2.5v4"/><circle cx="18" cy="17.5" r="4" ${F}/><path d="M16.3 17.6l1.2 1.2 2.2-2.3" stroke="#000" stroke-width="1.6"/>`),
+  moon: svg(`<path d="M20 14.6A8.2 8.2 0 0 1 9.4 4a8.2 8.2 0 1 0 10.6 10.6Z" ${F}/>`),
+  sunrise: svg(`<path d="M3 19h18M6.5 15.5a5.5 5.5 0 0 1 11 0M12 3v5M9.5 5.5 12 3l2.5 2.5M4.2 11l1.6 1M19.8 11l-1.6 1"/>`),
+  key: svg(`<circle cx="12" cy="7" r="4.2"/><path d="M12 11.2V21.5M12 16h3M12 19.3h2.2"/>`),
+  shield: svg(`<path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6Z"/>`),
+  hand: svg(`<path d="M8 13V6.5a1.5 1.5 0 0 1 3 0V12M11 11.5V5a1.5 1.5 0 0 1 3 0v6.5M14 11.5V6.5a1.5 1.5 0 0 1 3 0V14c0 4-2.5 7-6 7-2.6 0-4-1.5-5.5-4L4 14.3a1.5 1.5 0 0 1 2.4-1.7L8 14.5"/>`),
+  hourglass: svg(`<path d="M6.5 3h11M6.5 21h11M7.5 3c0 5.5 4.5 6 4.5 9s-4.5 3.5-4.5 9M16.5 3c0 5.5-4.5 6-4.5 9s4.5 3.5 4.5 9"/>`),
+  plusC: svg(`<circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/>`),
+  moreC: svg(`<circle cx="12" cy="12" r="9"/><path d="M8 12h.01M12 12h.01M16 12h.01" stroke-width="2.8"/>`),
+  plus: svg(`<path d="M12 5v14M5 12h14" stroke-width="2.4"/>`),
+  swap: svg(`<path d="M4 8h15M15.5 4.5 19 8l-3.5 3.5M20 16H5M8.5 12.5 5 16l3.5 3.5"/>`),
+  pin: svg(`<circle cx="12" cy="7" r="3.6" ${F}/><path d="M12 10.6V18M7.5 16.2c-2.2.5-3.5 1.3-3.5 2.2 0 1.5 3.6 2.6 8 2.6s8-1.1 8-2.6c0-.9-1.3-1.7-3.5-2.2"/>`),
+  pinSlash: svg(`<circle cx="12" cy="7" r="3.6" ${F}/><path d="M12 10.6V21M5 4.5l14 15"/>`),
+  locSlash: svg(`<path d="M3.5 11 20.5 3.5 13 20.5 11 13Z"/><path d="M4 4l16 16"/>`),
+  card: svg(`<rect x="3" y="5.5" width="18" height="13" rx="2.5" ${F}/><path d="M3 10h18" stroke="#0b0c0e" stroke-width="2.4"/>`),
+  refresh: svg(`<path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3M19.5 4.5v4.5H15"/>`),
+  doc: svg(`<path d="M7 3h7l4 4v14H7Z" ${F}/><path d="M10 12h5M10 16h5" stroke="#0b0c0e"/>`),
+  bubble: svg(`<path d="M4 4.5h16v11.5H9.5l-4 4v-4H4Z" ${F}/><path d="M12 7.5v4M12 13.6h.01" stroke="#0b0c0e" stroke-width="2.2"/>`),
+  list: svg(`<rect x="3.5" y="5" width="17" height="14" rx="2.5"/><path d="M7 9.5h10M7 12.5h10M7 15.5h6"/>`),
+  figure: svg(`<circle cx="12" cy="4.6" r="2.1" ${F}/><path d="M3.5 9.2h17M5.5 7.5v3.4M18.5 7.5v3.4M8.5 9.2l2 4.3h3l2-4.3M10.5 13.5l-1.6 7.5M13.5 13.5l1.6 7.5"/>`),
+  check: svg(`<path d="M5 12.5l4.5 4.5L19 7.5" stroke-width="2.8"/>`),
+  bars: svg(`<rect x="3.5" y="12" width="4.5" height="8.5" rx="1.4" ${F}/><rect x="9.75" y="7.5" width="4.5" height="13" rx="1.4" ${F}/><rect x="16" y="3.5" width="4.5" height="17" rx="1.4" ${F}/>`),
+  stetho: svg(`<path d="M6 3v5a4 4 0 0 0 8 0V3M10 12v3a4 4 0 0 0 8 0v-2"/><circle cx="18" cy="11" r="2"/>`),
+  screen: svg(`<rect x="5" y="2.5" width="14" height="19" rx="3"/><path d="M10 18.5h4"/>`),
+  close: svg(`<path d="M6 6l12 12M18 6 6 18" stroke-width="2.4"/>`),
+};
+const brandMark = (fill='#fff') => `<svg viewBox="0 0 862 584" style="width:100%;height:100%"><path fill="${fill}" d="M307 0L769 0C822 0 862 42 862 97C862 137 847 169 822 194L747 274C722 298 692 309 657 309L389 309L0 584L305 192L667 192L715 142Q723 126 707 124L193 124Z"/></svg>`;
+const brandTile = (size) => `<div class="brandtile" style="width:${size}px;height:${size}px;border-radius:${size*.235}px"><div style="width:${size*.62}px;height:${size*.42}px;transform:translate(${-size*.02}px,${size*.02}px)">${brandMark()}</div></div>`;
+
+/* =====================================================================
+   Content (mirrors Models.swift / PlanEngine.swift)
+   ===================================================================== */
+const AGES = [['under18','Under 18',16],['18-24','18–24',21],['25-29','25–29',27],['30-34','30–34',32],['35-44','35–44',40],['45-54','45–54',50],['55+','55 and over',60],['na','Prefer not to say',30]];
+const GENDERS = [['female','Female'],['male','Male'],['other','Prefer not to say / other']];
+const GOALS = [
+  ['muscle','Build muscle','More sets, moderate weight','figure'],
+  ['fat','Lose fat','Shorter rests, more total work','flame'],
+  ['strength','Get stronger','Heavier lifts, longer rests','dumbbell'],
+  ['consistent','Just be consistent','A simple plan you can keep','calCheck'],
+];
+const LENGTHS = [[4,'4 weeks'],[6,'6 weeks'],[8,'8 weeks'],[12,'12 weeks'],[17,'4 months'],[26,'6 months'],[39,'9 months'],[52,'12 months']];
+const EXPS = [['new','New to the gym'],['lt1','Under 1 year'],['1-3','1 to 3 years'],['3+','3+ years']];
+const EQUIP = [['gym','Commercial gym'],['home','Home gym'],['db','Dumbbells only'],['bw','Bodyweight only']];
+const SCREEN = [1,2,3,4,5,6,7,8].map(h => [String(h), h===8 ? 'Over 8 hours' : `${h}–${h+1} hours`, h===8 ? 9 : h+.5]);
+const QUOTES = ['I open TikTok without even deciding to.','Five minutes turns into an hour, every time.',"I'd train more if I scrolled less."];
+
+const ex = (n, sets, rest, start, note) => ({n, sets, rest, start, note});
+const WORKOUTS = {
+  'Upper A': {focus:'Chest, back, shoulders', ex:[
+    ex('Dumbbell bench press','3 × 8–10','2 min rest','Start with 45 lb dumbbells','Warm up with 1–2 lighter sets first.'),
+    ex('T-bar row','3 × 8–10','2 min rest','Start around 70 lb'),
+    ex('Dumbbell shoulder press','3 × 8–10','2 min rest','Start with 35 lb dumbbells'),
+    ex('Lat pulldown','3 × 10–12','90s rest','Start around 110 lb'),
+    ex('Cable lateral raise','3 × 12–15','60s rest','Start around 10 lb'),
+    ex('Triceps pushdown','3 × 10–14','60s rest','Start around 40 lb'),
+    ex('Dumbbell curl','3 × 10–14','60s rest','Start with 20 lb dumbbells'),
+  ]},
+  'Lower A': {focus:'Quads, glutes, adductors', ex:[
+    ex('Leg extension','3 × 10–14','60s rest','Start around 85 lb'),
+    ex('Hack squat','3 × 6–10','2 min rest','Start around 110 lb','Warm up with 1–2 lighter sets first.'),
+    ex('Romanian deadlift','3 × 8–10','2 min rest','Start around 135 lb'),
+    ex('Seated leg curl','3 × 10–14','60s rest','Start around 90 lb'),
+    ex('Hip adduction machine','3 × 10–14','60s rest','Start around 90 lb'),
+    ex('Standing calf raise','3 × 10–14','60s rest','Start around 90 lb'),
+    ex('Cable crunch','3 × 12–15','60s rest','Start around 50 lb'),
+  ]},
+  'Upper B': {focus:'Back, chest, arms', ex:[
+    ex('Lat pulldown','3 × 8–10','2 min rest','Start around 120 lb','Warm up with 1–2 lighter sets first.'),
+    ex('Incline dumbbell press','3 × 8–10','2 min rest','Start with 40 lb dumbbells'),
+    ex('Seated cable row','3 × 10–12','90s rest','Start around 100 lb'),
+    ex('Cable fly','3 × 12–15','60s rest','Start around 20 lb'),
+    ex('Reverse pec deck','3 × 12–15','60s rest','Start around 60 lb'),
+    ex('Hammer curl','3 × 10–14','60s rest','Start with 25 lb dumbbells'),
+    ex('Overhead triceps extension','3 × 10–14','60s rest','Start around 35 lb'),
+  ]},
+  'Lower B': {focus:'Hamstrings, glutes, quads', ex:[
+    ex('Seated leg curl','3 × 10–14','60s rest','Start around 90 lb'),
+    ex('Hip thrust','3 × 8–10','2 min rest','Start around 180 lb','Warm up with 1–2 lighter sets first.'),
+    ex('Dumbbell reverse lunge','3 × 8–10','2 min rest','Start with 20 lb dumbbells'),
+    ex('Leg extension','3 × 10–14','60s rest','Start around 85 lb'),
+    ex('Hip abduction machine','3 × 10–14','60s rest','Start around 85 lb'),
+    ex('Dumbbell calf raise','3 × 10–14','60s rest','Start with 20 lb dumbbells'),
+    ex('Cable crunch','3 × 12–15','60s rest','Start around 50 lb'),
+  ]},
+  'Full body': {focus:'Legs, chest, back', ex:[
+    ex('Hack squat','3 × 8–10','2 min rest','Start around 110 lb'),
+    ex('Dumbbell bench press','3 × 8–10','2 min rest','Start with 45 lb dumbbells'),
+    ex('Seated cable row','3 × 10–12','90s rest','Start around 100 lb'),
+    ex('Romanian deadlift','3 × 8–10','2 min rest','Start around 135 lb'),
+    ex('Cable lateral raise','3 × 12–15','60s rest','Start around 10 lb'),
+    ex('Cable crunch','3 × 12–15','60s rest','Start around 50 lb'),
+  ]},
+  'Push': {focus:'Chest, shoulders, triceps', ex:[
+    ex('Dumbbell bench press','3 × 8–10','2 min rest','Start with 45 lb dumbbells'),
+    ex('Dumbbell shoulder press','3 × 8–10','2 min rest','Start with 35 lb dumbbells'),
+    ex('Cable fly','3 × 12–15','60s rest','Start around 20 lb'),
+    ex('Cable lateral raise','3 × 12–15','60s rest','Start around 10 lb'),
+    ex('Triceps pushdown','3 × 10–14','60s rest','Start around 40 lb'),
+    ex('Overhead triceps extension','3 × 10–14','60s rest','Start around 35 lb'),
+  ]},
+  'Pull': {focus:'Lats, upper back, biceps', ex:[
+    ex('Lat pulldown','3 × 8–10','2 min rest','Start around 120 lb'),
+    ex('T-bar row','3 × 8–10','2 min rest','Start around 70 lb'),
+    ex('Reverse pec deck','3 × 12–15','60s rest','Start around 60 lb'),
+    ex('Dumbbell curl','3 × 10–14','60s rest','Start with 20 lb dumbbells'),
+    ex('Straight-arm pulldown','3 × 12–15','60s rest','Start around 40 lb'),
+    ex('Hammer curl','3 × 10–14','60s rest','Start with 25 lb dumbbells'),
+  ]},
+  'Legs': {focus:'Quads, hamstrings, glutes', ex:[
+    ex('Leg extension','3 × 10–14','60s rest','Start around 85 lb'),
+    ex('Hack squat','3 × 6–10','2 min rest','Start around 110 lb'),
+    ex('Romanian deadlift','3 × 8–10','2 min rest','Start around 135 lb'),
+    ex('Seated leg curl','3 × 10–14','60s rest','Start around 90 lb'),
+    ex('Standing calf raise','3 × 10–14','60s rest','Start around 90 lb'),
+    ex('Cable crunch','3 × 12–15','60s rest','Start around 50 lb'),
+  ]},
+};
+const SWAPS = {
+  'Seated leg curl':['Lying leg curl','Nordic curl'], 'Hip thrust':['Barbell glute bridge','Smith machine hip thrust'],
+  'Dumbbell reverse lunge':['Bulgarian split squat','Walking lunge'], 'Leg extension':['Sissy squat','Spanish squat'],
+  'Hip abduction machine':['Cable hip abduction','Banded lateral walk'], 'Dumbbell calf raise':['Standing calf raise','Seated calf raise'],
+  'Cable crunch':['Hanging knee raise','Ab wheel rollout'], 'Dumbbell bench press':['Barbell bench press','Machine chest press'],
+  'T-bar row':['Chest-supported row','Barbell row'], 'Lat pulldown':['Pull-up','Single-arm pulldown'],
+};
+// Plan options: index → days, weekday→workout (0 = Sunday)
+const PLANS = [
+  {name:'Upper / Lower', days:4, min:65, week:{1:'Upper A',2:'Lower A',4:'Upper B',6:'Lower B'},
+   why:(a)=>`Best fit for ${expPhrase(a)} and ${goalPhrase(a)}. Each muscle gets trained twice a week.`},
+  {name:'Upper / Lower / Full body', days:3, min:65, week:{1:'Upper A',3:'Lower A',5:'Full body'}, why:()=>'Fewer days, same goal. Good for a packed week.'},
+  {name:'Push / Pull / Legs + Upper / Lower', days:5, min:55, week:{1:'Push',2:'Pull',3:'Legs',5:'Upper A',6:'Lower A'}, why:()=>'One more day for more weekly volume, if you have the time.'},
+];
+const GYMS = [
+  {name:'Use my current location', detail:'For home, campus, or hotel gyms', icon:'nav'},
+  {name:'Iron Works Gym', detail:'214 Mercer St · 900 ft'},
+  {name:'Eastside Barbell Club', detail:'58 Canal Ave · 2,600 ft'},
+  {name:'Northgate Fitness', detail:'1200 Harbor Blvd · 0.82 mi'},
+  {name:'Campus Recreation Center', detail:'University Ave · 1.3 mi'},
+];
+const DOW = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+const DOW3 = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const TODAY = {dow:6, date:14, label:'Saturday, November 14'}; // demo "today"
+
+function expPhrase(a){ return ({new:'someone new to the gym', lt1:'under a year of lifting','1-3':'1–3 years of lifting','3+':'3+ years of lifting'})[a.exp] || 'your experience'; }
+function goalPhrase(a){ return ({muscle:'building muscle',fat:'losing fat',strength:'getting stronger',consistent:'staying consistent'})[a.goal] || 'your goal'; }
+
+/* =====================================================================
+   State
+   ===================================================================== */
+const fresh = () => ({
+  route:'onb', onb:0, revealed:false, demoStep:0,
+  a:{age:null, gender:null, weight:'170', goal:null, weeks:8, exp:null, equip:null, pullup:false, screen:null},
+  planIdx:0, week:{...PLANS[0].week}, gym:1, apps:4, wake:'07:00', bed:'22:30', allow:2, notif:false, payPlan:'year',
+  tab:'today', day:'locked', streak:9, emUsed:0,
+  sess:null, workoutName:null, sheet:null, reason:'', countdown:0,
+  weights:[171.2,171.8,172.6,173.4], history:[
+    {icon:'slider', title:'Added Saturday', detail:'Tightened. In effect now.', date:'Nov 2'},
+    {icon:'key', title:'Emergency unlock', detail:'Flight home, no gym at the airport.', date:'Nov 5'},
+  ],
+});
+let S = fresh();
+const ONB = ['value','age','gender','weight','goal','length','exp','equip','screen','years','plan','week','gym','apps','schedule','trial'];
+
+/* =====================================================================
+   Helpers
+   ===================================================================== */
+const plan = () => PLANS[S.planIdx];
+const target = () => 60; // min at the gym to verify (PlanEngine.targetMinutes for a 65-min session)
+const todayWorkout = () => S.week[TODAY.dow] || null;
+const fmtTime = (hhmm) => { let [h,m] = hhmm.split(':').map(Number); const ap = h>=12?'PM':'AM'; h = h%12||12; return `${h}:${String(m).padStart(2,'0')} ${ap}`; };
+const gymName = () => S.gym === 0 ? 'your current spot' : GYMS[S.gym].name;
+const emLeft = () => Math.max(0, S.allow - S.emUsed);
+function nextTraining(){
+  for (let i=1;i<=7;i++){ const d=(TODAY.dow+i)%7; if (S.week[d]) return {day:DOW[d], w:S.week[d]}; }
+  return {day:'—', w:'—'};
+}
+function yearsOnPhone(){
+  const age = (AGES.find(x=>x[0]===S.a.age)||AGES[7])[2];
+  const hrs = (SCREEN.find(x=>x[0]===S.a.screen)||SCREEN[3])[2];
+  return Math.max(1, Math.round(hrs/24*Math.max(79-age,5)));
+}
+const mark = on => `<span class="mark ${on?'on':''}">${on?I.check:''}</span>`;
+function optRows(key, opts, numeric){
+  return `<div class="group">${opts.map(o=>{
+    const v = o.v, on = String(S.a[key])===String(v);
+    return `<button class="opt ${on?'sel':''} ${o.icon?'has-ic':''}" data-act="pick" data-k="${key}" data-v="${v}" data-num="${numeric?1:''}">
+      ${o.icon?`<span class="oic">${I[o.icon]}</span>`:''}
+      <span class="otx"><b>${o.title}</b>${o.detail?`<small>${o.detail}</small>`:''}</span>${mark(on)}</button>`;}).join('')}</div>`;
+}
+const pageTitle = (t, s) => `<div class="pagetitle"><h1>${t}</h1>${s?`<p>${s}</p>`:''}</div>`;
+function ring(size, stroke, progress, color='var(--glow)', track='var(--track)'){
+  const r = (size-stroke)/2, c = 2*Math.PI*r, p = Math.min(Math.max(progress,0),1);
+  return `<svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" style="transform:rotate(-90deg)">
+    <circle cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke="${track}" stroke-width="${stroke}"/>
+    <circle class="ringfill" cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke="${color}" stroke-width="${stroke}" stroke-linecap="round"
+      stroke-dasharray="${c}" stroke-dashoffset="${c*(1-p)}" style="transition:stroke-dashoffset .25s linear"/></svg>`;
+}
+function dayMark(kind, size=34){
+  const w=4.5, r=(size-w)/2, c=size/2;
+  let inner='';
+  if (kind==='ver') inner=`<circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="var(--glow)" stroke-width="${w}"/>`;
+  else if (kind==='em') inner=`<circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="var(--glow)" stroke-width="2" stroke-dasharray="3 3"/>`;
+  else if (kind==='pending') inner=`<circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="var(--track)" stroke-width="${w}"/><circle cx="${c}" cy="${w/2+0.5}" r="${w/2}" fill="var(--glow)"/>`;
+  else if (kind==='upcoming') inner=`<circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="var(--track)" stroke-width="${w}"/>`;
+  else inner=`<rect x="${c-5}" y="${c-1.5}" width="10" height="3" rx="1.5" fill="var(--track)"/>`;
+  return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">${inner}</svg>`;
+}
+function toast(msg){
+  const t = document.createElement('div'); t.className='toast'; t.textContent=msg;
+  document.getElementById('phone').appendChild(t); setTimeout(()=>t.remove(), 2700);
+}
+
+/* =====================================================================
+   Onboarding
+   ===================================================================== */
+function onbCanContinue(){
+  const p = ONB[S.onb], a = S.a;
+  switch(p){
+    case 'age': return !!a.age; case 'gender': return !!a.gender;
+    case 'weight': { const n = Number(a.weight); return n>=50 && n<=700; }
+    case 'goal': return !!a.goal; case 'exp': return !!a.exp; case 'equip': return !!a.equip; case 'screen': return !!a.screen;
+    case 'week': return Object.keys(S.week).length>0;
+    default: return true;
+  }
+}
+function renderOnb(){
+  const p = ONB[S.onb];
+  if (p==='years' && !S.revealed) return calcView();
+  const pct = ((S.onb+1)/ONB.length)*100;
+  const head = `<div class="pad-top"></div><div class="onb-head">${S.onb>0?`<button class="back" data-act="onbBack" aria-label="Back">${I.chevL}</button>`:''}<div class="prog"><i style="width:${pct}%"></i></div></div>`;
+  const label = p==='value'?'Get started':p==='week'?'This works for me':'Continue';
+  const note = p==='value' ? `<div class="note">Takes about two minutes.</div>` : '';
+  const yearsBg = p==='years' ? ' calc' : '';
+  return `<div class="view${yearsBg}">${head}<div class="scroll" data-scroll>${onbBody(p)}<div style="height:24px"></div></div>
+    <div class="foot" ${p==='years'?'style="background:none"':''}><button class="btn primary" id="onbNext" data-act="onbNext" ${onbCanContinue()?'':'disabled'}>${label}</button>${note}</div></div>`;
+}
+function onbBody(p){
+  const a = S.a;
+  switch(p){
+  case 'value': {
+    const st = S.demoStep, bal = st===0?0:st===1?90:55;
+    return `<div class="card mt16" style="border-radius:var(--r-xl);padding:24px 20px">
+      <div style="position:relative;width:178px;height:178px;margin:0 auto">${ring(178,12,bal/90)}
+        <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center">
+          <div style="font-size:56px;font-weight:200;line-height:1">${bal}</div><div class="t-foot" style="margin-top:6px">min in your bank</div></div></div>
+      <div class="stack mt20" style="min-height:118px">
+        ${st>=1?`<div class="row g12 typing" style="padding:10px 0;border-bottom:1px solid var(--hair)"><span class="icotile wash">${I.dumbbell}</span><div style="flex:1"><div class="t-head">Push workout</div><div class="t-sub">Verified at your gym</div></div><b class="glow" style="font-size:17px">+90 min</b></div>`:''}
+        ${st>=2?`<div class="row g12 typing" style="padding:10px 0"><span class="icotile">${I.screen}</span><div style="flex:1"><div class="t-head">Instagram</div><div class="t-sub">35 min of scrolling</div></div><b class="sec" style="font-size:17px">−35 min</b></div>`:''}
+      </div></div>
+      <h1 class="t-display mt24" style="font-size:34px;line-height:41px">Exercise earns<br>screen time.<br><span class="sec">Scrolling spends it.</span></h1>
+      <p class="t-sub mt12" style="font-size:17px;line-height:23px">Finish a workout and minutes land in your bank. TikTok and Instagram use them up only while you scroll. At zero, they lock again.</p>`;
+  }
+  case 'age': return pageTitle('How old are you?','We use it to put your screen time in perspective.') + optRows('age', AGES.map(x=>({v:x[0],title:x[1]})));
+  case 'gender': return pageTitle('What is your gender?') + optRows('gender', GENDERS.map(x=>({v:x[0],title:x[1]})));
+  case 'weight': return pageTitle("What's your bodyweight?","It's your starting point on the Progress tab. A rough number is fine.") +
+    `<div class="card row" style="justify-content:center;align-items:baseline;gap:8px;padding:26px 20px">
+      <input id="weightIn" inputmode="decimal" value="${a.weight}" aria-label="Bodyweight in pounds" style="width:170px;background:none;border:0;outline:none;text-align:right;font-size:72px;font-weight:100;caret-color:var(--glow)">
+      <span class="sec" style="font-size:22px;font-weight:600">lb</span></div>
+      <p class="t-foot mt12" id="weightErr" style="display:${onbCanContinue()?'none':'block'};color:var(--danger)">Enter a weight between 50 and 700 lb.</p>`;
+  case 'goal': return pageTitle("What's your goal?","Your plan and your lock schedule are built around it.") + optRows('goal', GOALS.map(x=>({v:x[0],title:x[1],detail:x[2],icon:x[3]})));
+  case 'length': return pageTitle('How long is your goal?','Pick something you can keep. You can change it later.') + optRows('weeks', LENGTHS.map(x=>({v:x[0],title:x[1]})), true);
+  case 'exp': return pageTitle('How long have you been lifting?','This sets the exercises and how hard your plan starts.') + optRows('exp', EXPS.map(x=>({v:x[0],title:x[1]})));
+  case 'equip': return pageTitle('What equipment do you have?','Pick the closest match.') + optRows('equip', EQUIP.map(x=>({v:x[0],title:x[1]}))) +
+    (a.equip && a.equip!=='gym' ? `<button class="group row g16 mt20" data-act="togglePullup" style="padding:16px 18px;width:100%"><span style="flex:1"><span class="t-head" style="display:block">I have a pull-up bar</span><span class="t-sub">Adds pull-ups and hanging core work.</span></span><span class="toggle ${a.pullup?'on':''}"></span></button>` : '');
+  case 'screen': return pageTitle("What's your daily average screen time?","Your best guess is fine. Settings → Screen Time has the real number.") + optRows('screen', SCREEN.map(x=>({v:x[0],title:x[1]})));
+  case 'years': {
+    const band = (SCREEN.find(x=>x[0]===a.screen)||SCREEN[3])[1].toLowerCase();
+    return `<div style="min-height:560px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:0 8px" class="typing">
+      <div style="font-size:96px;line-height:1">🤯</div>
+      <h1 class="t-title mt24" style="font-size:28px;line-height:36px">At this rate you're going to spend <span class="glow">${yearsOnPhone()} years</span> of your life on your phone.</h1>
+      <p class="t-sub mt16">That's ${band} a day, every day, until age 79.</p></div>`;
+  }
+  case 'plan': {
+    const opts = PLANS.map((pl,i)=>{ const on = S.planIdx===i;
+      return `<button class="opt ${on?'sel':''}" data-act="pickPlan" data-v="${i}" style="align-items:flex-start;padding:18px">
+        <span class="otx">${i===0?'<span class="pill glow" style="align-self:flex-start;margin-bottom:6px">Recommended</span>':''}
+        <b style="font-size:19px">${pl.name}</b><span style="font-size:16px;color:var(--label);opacity:.85">${pl.days} days a week · about ${pl.min} min</span>
+        <small>${pl.why(S.a)}</small></span>${mark(on)}</button>`; }).join('');
+    const uniq = [...new Set(Object.values(PLANS[S.planIdx].week))];
+    return pageTitle('Pick your plan.','Built from your answers. You can change it anytime.') + `<div class="group">${opts}</div>
+      <div class="card mt16 stack g12"><div class="t-sub" style="color:var(--label);font-weight:600">What's inside</div>
+        ${uniq.map(w=>{ const e = WORKOUTS[w].ex; return `<div><div class="t-head">${w}</div><div class="t-sub">${e.slice(0,3).map(x=>x.n).join(', ')}${e.length>3?` +${e.length-3}`:''}</div></div>`; }).join('')}
+        <div class="hair"></div><div class="t-sub" style="color:var(--label);font-weight:600">How it progresses</div>
+        ${phases().map(ph=>`<div><div style="font-size:16px;font-weight:600">${ph[0]}</div><div class="t-foot">${ph[1]}</div></div>`).join('')}
+      </div>
+      <p class="t-foot mt16">This is a plan built for your goal, not a promise. Starting weights are estimates, so start lighter if a set feels hard. Talk to a doctor before starting a new exercise program.</p>`;
+  }
+  case 'week': {
+    const rows = [0,1,2,3,4,5,6].map(d=>{ const w = S.week[d];
+      return `<button class="lrow" data-act="toggleDay" data-v="${d}" style="--inset:76px;min-height:${w?66:58}px">
+        <span class="daypill ${w?'on':''}">${DOW3[d]}</span>
+        <span class="tx">${w?`<b>${w}</b><small>${WORKOUTS[w].focus}</small>`:`<span class="sec" style="font-size:17px">Rest</span>`}</span>
+        <span style="font-size:24px;color:${w?'var(--glow)':'var(--ter)'}">${w?I.moreC:I.plusC}</span></button>`; }).join('');
+    const n = Object.keys(S.week).length;
+    return pageTitle('Set your week.','Your sessions are spread out for recovery. Tap a day to move or change it. Your apps lock on training days.') +
+      `<div class="group">${rows}</div><p class="t-foot mt12">${n} training ${n===1?'day':'days'} · about ${plan().min} min each · ${target()} min at the gym to unlock</p>
+      <button class="btn quiet" data-act="resetWeek">Reset to suggested week</button>`;
+  }
+  case 'gym': return pageTitle('Where do you train?','Your apps unlock after a session here.') + mapSVG() +
+    `<div class="group mt16">${GYMS.map((g,i)=>{ const on=S.gym===i;
+      return `<button class="opt ${on?'sel':''} has-ic" data-act="pickGym" data-v="${i}" style="--x:0">
+        <span class="icotile ${on?'':'wash'}" style="${on?'background:var(--accent);color:#fff':''}">${I[g.icon||'dumbbell']}</span>
+        <span class="otx"><b>${g.name}</b><small>${g.detail}</small></span>${mark(on)}</button>`;}).join('')}</div>`;
+  case 'apps': return pageTitle('Pick the apps that eat your day.','They lock on training days until your session is verified.') +
+    `<div class="card"><div class="row g8">${['T','I','Y','S','X','R'].slice(0,S.apps).map(l=>`<span style="width:46px;height:46px;border-radius:12px;background:var(--sunken);display:grid;place-items:center;font-weight:800;font-size:20px">${l}</span>`).join('')}</div>
+      <div class="row between mt16"><span class="t-head" style="font-size:19px">${S.apps} apps will lock</span><button class="glow" style="font-size:17px" data-act="changeApps">Change</button></div></div>
+      <div class="card mt16 stack g20">${[['hand',"You choose in Apple's own picker. PowerLock never learns which apps you picked."],['hourglass','It runs on Screen Time, so iOS asks for your permission first.'],['lockOpen','You can switch it off in iOS Settings at any time. This is a commitment you keep, not a cage.']]
+        .map(([ic,t])=>`<div class="row g16" style="align-items:flex-start"><span class="icotile wash">${I[ic]}</span><span style="font-size:16px;line-height:22px">${t}</span></div>`).join('')}</div>`;
+  case 'schedule': return pageTitle('Set your day.',"Apps lock when you wake up and open at bedtime if you didn't train.") +
+    `<div class="group"><div class="srow" style="min-height:66px"><span class="sic">${I.sunrise}</span><span class="lbl">Wake time</span><input type="time" class="timepill" data-time="wake" value="${S.wake}"></div>
+      <div class="srow" style="min-height:66px"><span class="sic">${I.moon}</span><span class="lbl">Bedtime</span><input type="time" class="timepill" data-time="bed" value="${S.bed}"></div></div>
+      <div class="t-head mt24" style="font-size:19px">Emergency unlocks a week</div>
+      <div class="chips mt12">${[1,2,3].map(n=>`<button class="${S.allow===n?'on':''}" data-act="setAllow" data-v="${n}">${n}</button>`).join('')}</div>
+      <p class="t-foot mt12">For sick days and real emergencies. Each one takes a minute and a reason, and it's logged. Fewer is stricter.</p>
+      <div class="card row g16 mt20"><span class="icotile wash">${I.bell}</span><span style="flex:1"><span class="t-head" style="display:block;font-size:19px">Notifications</span><span class="t-sub">So the lock screen can send you straight to your session.</span></span>
+        ${S.notif?`<span class="sec">On</span>`:`<button class="pill accent" style="font-size:16px;padding:9px 16px" data-act="allowNotif">Allow</button>`}</div>`;
+  case 'trial': return pageTitle('How your free trial works','Seven days to find out if the lock changes your week.') +
+    `<div class="card" style="padding:20px 20px 8px">${[['lock','Today','Your plan and your lock start. Everything is included.'],['bell','Day 5','We remind you that the trial is ending soon.'],['calendar','Day 7','Your subscription starts, unless you cancelled before then.']]
+      .map(([ic,t,d],i,arr)=>`<div class="row g16" style="align-items:flex-start;position:relative;padding-bottom:20px">
+        ${i<arr.length-1?'<span style="position:absolute;left:19px;top:40px;bottom:0;width:2px;background:var(--sunken)"></span>':''}
+        <span class="icotile ${i===0?'':'wash'}" style="width:40px;height:40px;${i===0?'background:var(--accent);color:#fff':''}">${I[ic]}</span>
+        <span><span class="t-head" style="display:block;font-size:18px">${t}</span><span class="t-sub" style="font-size:16px">${d}</span></span></div>`).join('')}</div>
+      <p class="t-foot mt16">Cancel anytime in Settings. It takes a few seconds.</p>`;
+  }
+}
+function phases(){
+  const w = S.a.weeks || 8;
+  const build = ({strength:'Add weight in small steps on the first two lifts of each workout.',muscle:'Add a rep or a little weight each week. Stop each set 1–2 reps short of failure.',fat:'Keep rests short and the pace up. Add weight when the reps get easy.',consistent:'Show up on your days. Add weight only when it feels easy.'})[S.a.goal||'muscle'];
+  const lighter = 'Same exercises, about half the sets. Lets your joints and energy catch up.';
+  const block = 3; if (w <= block+1) return [[`Weeks 1–${w}`, build]];
+  const out=[]; let wk=1; const until = w<=13 ? w : block+1;
+  while (wk<=until){ const end=Math.min(wk+block-1,w); out.push([wk===end?`Week ${wk}`:`Weeks ${wk}–${end}`, build]); wk=end+1;
+    if (wk<=until && wk<w){ out.push([`Week ${wk}: lighter`, lighter]); wk++; } }
+  if (w>13) out.push([`Then repeat to week ${w}`, `${block} weeks building, 1 lighter. Swap a few exercises every 2–3 cycles to keep progressing.`]);
+  if (S.a.goal==='strength' && w>=8) out.push(['Last week: test','Work up to a heavy set of 3–5 on your main lifts, with a spotter or safety pins.']);
+  return out;
+}
+function mapSVG(){
+  let lines='';
+  for (let i=-6;i<16;i++) lines += `<line x1="${i*40}" y1="-40" x2="${i*40+120}" y2="240" stroke="#2c3550" stroke-width="${i%3?3:6}"/>`;
+  for (let i=-2;i<12;i++) lines += `<line x1="-40" y1="${i*26}" x2="420" y2="${i*26-90}" stroke="#2a3149" stroke-width="${i%4?2:5}"/>`;
+  const blocks = [[60,40,30,18],[240,120,40,22],[300,30,26,30],[30,130,34,20]].map(([x,y,w,h])=>`<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="3" fill="#3a2f5a" opacity=".55"/>`).join('');
+  const labels = [['W 22ND ST',20,60,-14],['5TH AVE',190,40,-62],['MADISON AVE',255,150,-62],['PARK AVE S',300,90,-62],['FLATIRON',190,170,0]].map(([t,x,y,r])=>`<text x="${x}" y="${y}" transform="rotate(${r} ${x} ${y})" fill="#8b93ad" font-size="9" font-weight="700" letter-spacing=".5">${t}</text>`).join('');
+  return `<div class="map"><svg viewBox="0 0 350 176" width="100%" height="100%" preserveAspectRatio="xMidYMid slice"><rect width="350" height="176" fill="#1d2333"/>${lines}${blocks}${labels}
+    <circle cx="175" cy="88" r="34" fill="rgba(47,111,235,.25)" stroke="var(--glow)" stroke-width="1.5"/>
+    <circle cx="175" cy="72" r="14" fill="var(--accent)" stroke="#fff" stroke-width="2"/>
+    <path d="M170.5 67.5v9M179.5 67.5v9M168 70v4M182 70v4M170.5 72h9" stroke="#fff" stroke-width="2" stroke-linecap="round" fill="none"/>
+    <text x="175" y="103" text-anchor="middle" fill="#fff" font-size="11" font-weight="700" stroke="#1d2333" stroke-width="3" paint-order="stroke">${S.gym===0?'Current location':GYMS[S.gym].name}</text></svg>
+    <span class="pill" style="position:absolute;left:10px;bottom:10px;background:rgba(0,0,0,.65);color:#fff">150 m radius</span></div>`;
+}
+function calcView(){
+  return `<div class="view calc"><div class="pad-top"></div><div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:26px;padding:0 24px;text-align:center">
+    <div style="position:relative;width:190px;height:190px" id="calcRing">${ring(190,12,0)}<div id="calcPct" style="position:absolute;inset:0;display:grid;place-items:center;font-size:46px;font-weight:300;color:var(--glow)">0%</div></div>
+    <div class="t-head" style="font-size:19px">Calculating your data…</div>
+    <div><div class="t-foot">Sound familiar?</div><div id="calcQuote" class="mt8" style="font-size:17px">“${QUOTES[0]}”</div></div></div></div>`;
+}
+let calcTimer=null;
+function runCalc(){
+  clearInterval(calcTimer); let pct=0, q=0, hold=0;
+  calcTimer = setInterval(()=>{
+    if (S.route!=='onb' || ONB[S.onb]!=='years' || S.revealed){ clearInterval(calcTimer); return; }
+    if (hold>0){ hold--; return; }
+    pct++;
+    const el=document.getElementById('calcPct'), rg=document.querySelector('#calcRing .ringfill');
+    if (el){ el.textContent = pct+'%'; const c=parseFloat(rg.getAttribute('stroke-dasharray')); rg.setAttribute('stroke-dashoffset', c*(1-pct/100)); }
+    if (pct===37||pct===72){ q++; hold=12; const qe=document.getElementById('calcQuote'); if(qe){ qe.classList.remove('typing'); void qe.offsetWidth; qe.classList.add('typing'); qe.textContent=`“${QUOTES[q%3]}”`; } }
+    if (pct>=100){ clearInterval(calcTimer); setTimeout(()=>{ S.revealed=true; render(); }, 450); }
+  }, 30);
+}
+let demoTimers=[];
+function runValueDemo(){
+  if (S.demoStep>0) return;
+  demoTimers.forEach(clearTimeout);
+  demoTimers=[setTimeout(()=>{ if(S.route==='onb'&&S.onb===0){S.demoStep=1;render();} },900), setTimeout(()=>{ if(S.route==='onb'&&S.onb===0){S.demoStep=2;render();} },2600)];
+}
+
+/* =====================================================================
+   Paywall
+   ===================================================================== */
+function renderPaywall(){
+  const yr = S.payPlan==='year';
+  const planCard = (id, title, sub, price, badge) => { const on=S.payPlan===id;
+    return `<button data-act="payPlan" data-v="${id}" class="row g16" style="position:relative;width:100%;padding:18px 20px;border-radius:22px;background:${on?'#0d1730':'var(--surface)'};border:${on?'2px solid var(--accent)':'1px solid var(--hair)'}">
+      ${badge?`<span class="pill accent" style="position:absolute;top:-13px;right:16px;font-size:13px">${badge}</span>`:''}
+      ${mark(on)}<span style="flex:1"><span class="t-head" style="display:block;font-size:18px">${title}</span><span class="t-foot">${sub}</span></span><b style="font-size:17px">${price}</b></button>`; };
+  return `<div class="view"><div class="pad-top"></div><div class="scroll" data-scroll><div class="mt16">${brandTile(58)}</div>
+    <h1 class="t-display mt16">Keep your word.</h1>
+    <p class="t-sub mt8" style="font-size:17px;line-height:23px">Your plan and your lock are ready. Try PowerLock free for 7 days.</p>
+    <div class="stack g16 mt20">${[['lock','Your apps stay locked until you train'],['nav','Verified by GPS at your gym, not the honor system'],['dumbbell','A plan built for your goal, week by week'],['key','Fair by design: emergency unlocks and travel gyms']]
+      .map(([ic,t])=>`<div class="row g16"><span class="icotile wash" style="width:32px;height:32px;font-size:14px">${I[ic]}</span><span style="font-size:17px;line-height:22px">${t}</span></div>`).join('')}</div>
+    <div class="stack g12 mt24">${planCard('year','Yearly','Then about $2.50 a month','$29.99 / year','7 days free')}${planCard('month','Monthly','No free trial','$7.99 / month')}</div><div style="height:16px"></div></div>
+    <div class="foot"><button class="btn primary" data-act="subscribe">${yr?'Start free trial':'Subscribe'}</button>
+      <div class="note">${yr?'7 days free, then $29.99 a year until you cancel. Cancel anytime in Settings, at least a day before the trial ends.':'$7.99 a month until you cancel. Cancel anytime in Settings.'}</div>
+      <div class="row between mt12" style="padding:0 18px;font-size:14px;color:var(--sec)"><button data-act="toast" data-v="Restores a purchase made on this Apple Account.">Restore</button><button data-act="toast" data-v="Opens powerlock.app/terms">Terms</button><button data-act="toast" data-v="Opens powerlock.app/privacy">Privacy</button></div></div></div>`;
+}
+
+/* =====================================================================
+   Main tabs
+   ===================================================================== */
+function renderMain(){
+  let body = S.tab==='today' ? todayTab() : S.tab==='plan' ? planTab() : progressTab();
+  const tabs = [['today',S.day==='locked'?'lock':'lockOpen','Today'],['plan','dumbbell','Plan'],['progress','bars','Progress']];
+  return `<div class="view"><div class="pad-top" style="height:54px"></div><div class="scroll" data-scroll>${body}<div style="height:130px"></div></div>
+    <div class="fade-bottom"></div>
+    <nav class="tabbar">${tabs.map(([id,ic,l])=>`<button class="${S.tab===id?'on':''}" data-act="tab" data-v="${id}">${I[ic]}<span>${l}</span></button>`).join('')}</nav></div>`;
+}
+function weekOutcomes(){
+  // Week of Sun Nov 8 – Sat Nov 14. Past training days verified (Thu Nov 12 verified too).
+  return [0,1,2,3,4,5,6].map(d=>{
+    if (!S.week[d]) return 'rest';
+    if (d<TODAY.dow) return 'ver';
+    return S.day==='unlocked'?'ver':S.day==='emergency'?'em':'pending';
+  });
+}
+function todayTab(){
+  const w = todayWorkout(), nx = nextTraining(), oc = weekOutcomes();
+  const nTrain = oc.filter(x=>x!=='rest').length, nVer = oc.filter(x=>x==='ver').length;
+  let hero='';
+  if (S.day==='locked') hero = `<div class="card hero">
+      <div class="row between"><span class="row g12"><span class="icotile wash">${I.lock}</span><span class="glow t-head" style="font-weight:500">Locked</span></span><span class="t-sub">until ${fmtTime(S.bed)}</span></div>
+      <h2 class="t-title mt16">Locked until you train.</h2>
+      <p class="t-sub mt8" style="font-size:16px;line-height:22px">${w||'Your session'} at ${gymName()} opens your ${S.apps} apps for the rest of the day.</p>
+      <div class="stat3 mt16"><div><span class="v">${S.apps}</span><span class="l">apps locked</span></div><div><span class="v">${target()}</span><span class="l">min to unlock</span></div><div><span class="v">${fmtTime(S.bed).replace(/ (AM|PM)/,'')}</span><span class="l">lock ends</span></div></div>
+      <button class="btn primary mt16" data-act="startSession">${I.nav} Start session</button></div>`;
+  else {
+    const blue = S.day==='unlocked';
+    const pill = S.day==='unlocked'?'Verified':S.day==='rest'?'Rest day':'Emergency unlock';
+    const title = S.day==='unlocked'?'Unlocked. You earned it.':S.day==='rest'?"Nothing's locked today.":'Unlocked for today.';
+    const body = S.day==='unlocked'?`${S.sess?Math.round(S.sess.secs/60):46} min at ${gymName()}. Your apps are open for the rest of the day.`:S.day==='rest'?'Recover well. Your apps lock again on your next training day.':"It's logged in Progress, and your streak is paused, not broken.";
+    hero = `<div class="card hero ${blue?'blue':''}">
+      <div class="row g12"><span class="icotile" style="${blue?'background:#fff;color:var(--accent)':'background:var(--wash);color:var(--glow)'}">${I.lockOpen}</span><span class="t-head" style="font-weight:500;color:${blue?'#fff':'var(--glow)'}">${pill}</span></div>
+      <h2 class="t-title mt16">${title}</h2><p class="sec mt8" style="font-size:16px;line-height:22px;margin-bottom:0">${body}</p>
+      <div class="hair mt16"></div>
+      <div class="row between mt12"><span class="sec" style="font-size:15px">Next lock</span><span class="sec" style="font-size:15px">${fmtTime(S.wake)}</span></div>
+      <div class="t-head" style="font-size:19px;margin-top:2px">${nx.day} · ${nx.w}</div></div>`;
+  }
+  const strip = `<div class="card mt16"><div class="row between"><span class="t-head" style="font-size:19px">This week</span><span class="t-sub">${nVer} of ${nTrain} verified</span></div>
+    <div class="weekstrip">${oc.map((o,i)=>`<div style="display:flex;flex-direction:column;align-items:center">${dayMark(o)}<span class="${i===TODAY.dow?'today':''}">${'SMTWTFS'[i]}</span></div>`).join('')}</div></div>`;
+  const stats = `<div class="stat2 mt20"><div><div class="v">${S.streak}</div><div class="l">sessions in a row</div></div><div><div class="v">${emLeft()}<small> / ${S.allow}</small></div><div class="l">emergency unlocks left</div></div></div>`;
+  let extra='';
+  if (S.day==='locked' && w){
+    const e = WORKOUTS[w].ex;
+    extra = `<div class="secthead"><span class="t-heading">Today's workout</span><button data-act="tab" data-v="plan">Full plan</button></div>
+      <button class="card" style="width:100%;text-align:left" data-act="openWorkout" data-v="${w}"><div class="row between"><span class="t-head" style="font-size:19px">${w}</span><span class="chev ter">${I.chevR}</span></div>
+      <div class="t-sub">${e.length} exercises · about ${plan().min} min</div><div class="t-foot mt8">${e.slice(0,4).map(x=>x.n).join(' · ')}…</div></button>
+      <div class="stack mt16"><button class="btn quiet" data-act="toast" data-v="Pick a nearby gym for today only. Your home gym stays the same.">I'm at a different gym</button>
+      <button class="btn quiet" style="color:var(--sec)" data-act="openEmergency">Emergency unlock</button></div>`;
+  }
+  return `<div class="topbar"><button class="circlebtn" data-act="openSettings" aria-label="Settings">${I.sliders}</button></div>
+    <h1 class="t-display">Today</h1><div class="t-sub" style="font-size:17px;margin:2px 0 16px">${TODAY.label}</div>${hero}${strip}${stats}${extra}`;
+}
+function planTab(){
+  const pl = plan(), weeks = S.a.weeks||8, goal = GOALS.find(g=>g[0]===(S.a.goal||'muscle'));
+  const rows = [0,1,2,3,4,5,6].map(i=>{ const d=(TODAY.dow+i)%7, date = TODAY.date+i, w=S.week[d];
+    return `<button class="lrow" ${w?`data-act="openWorkout" data-v="${w}"`:''} style="--inset:76px;min-height:64px">
+      <span style="width:46px;text-align:center"><span style="display:block;font-size:13px;font-weight:600;color:${i===0?'var(--glow)':'var(--sec)'}">${DOW3[d].toUpperCase()}</span><span style="font-size:22px;font-weight:300">${date}</span></span>
+      <span class="tx">${w?`<b>${w}</b><small>${WORKOUTS[w].ex.length} exercises · ${pl.min} min</small>`:`<span class="sec" style="font-size:17px">Rest</span>`}</span>
+      ${i===0&&w?'<span class="pill accent" style="font-size:14px">Today</span>':''}${w?`<span class="chev">${I.chevR}</span>`:''}</button>`; }).join('');
+  return `<div style="height:44px"></div><h1 class="t-display">Plan</h1>
+    <div class="card mt16" style="border-radius:var(--r-xl)"><div class="row between" style="align-items:flex-start"><div><div class="t-sub">Goal</div><h2 class="t-title" style="font-size:28px">${goal[1]}</h2><div class="t-sub">${pl.name.replace(' / Full body','')} split</div></div><span class="icotile wash" style="width:46px;height:46px;font-size:20px">${I[goal[3]]}</span></div>
+      <div class="mt16" style="height:4px;border-radius:9px;background:var(--track)"><div style="width:${Math.min(4/weeks,1)*100}%;height:100%;border-radius:9px;background:var(--glow)"></div></div>
+      <div class="row between mt12"><b style="font-size:16px">Week 4 of ${weeks}</b><span class="t-sub">Ends Dec 17</span></div>
+      <div class="hair mt16"></div>
+      <div class="row mt16" style="gap:0">${[[pl.days,'days a week'],[pl.min,'min a session'],[11,'sessions done']].map(([v,l])=>`<div style="flex:1"><div class="stat" style="font-size:30px">${v}</div><div class="t-foot">${l}</div></div>`).join('')}</div></div>
+    <div class="secthead"><span class="t-heading">This week</span></div><div class="group">${rows}</div>
+    <div class="secthead"><span class="t-heading">How it progresses</span></div>
+    <div class="card stack g12">${phases().map(ph=>`<div><div style="font-size:16px;font-weight:600">${ph[0]}</div><div class="t-foot">${ph[1]}</div></div>`).join('')}</div>`;
+}
+function progressTab(){
+  const verDays = [], emDays=[5];
+  for (let d=1; d<TODAY.date; d++){ const dow=(d-1)%7; if (S.week[dow] && !emDays.includes(d)) verDays.push(d); }
+  let cells = 'SMTWTFS'.split('').map(x=>`<span class="h">${x}</span>`).join('');
+  for (let d=1; d<=30; d++){ const dow=(d-1)%7; let cls='d';
+    if (d<TODAY.date){ if (emDays.includes(d) && S.week[dow]) cls+=' em'; else if (verDays.includes(d)) cls+=' ver'; }
+    else if (d===TODAY.date){ cls += S.day==='unlocked'?' ver':S.day==='emergency'?' em':S.week[dow]?' today':''; }
+    else if (S.week[dow]) cls+=' train';
+    cells += `<span class="${cls}">${d}</span>`; }
+  const ws = S.weights, last = ws[ws.length-1], change = (last-ws[0]).toFixed(1);
+  const min = Math.min(...ws)-1, max = Math.max(...ws)+1, W=300, H=90;
+  const pts = ws.map((v,i)=>[ (i/(ws.length-1))*W, H-((v-min)/(max-min))*H ]);
+  const path = pts.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1)).join(' ');
+  const histIcon = {key:'key', slider:'sliders', scale:'figure'};
+  return `<div style="height:44px"></div><h1 class="t-display">Progress</h1>
+    <div class="row g12 mt16" style="align-items:stretch"><div class="card" style="flex:1;padding:16px"><span class="glow">${I.flame}</span><div class="stat mt8">${S.streak}</div><div class="t-foot">sessions in a row</div></div>
+      <div class="card" style="flex:1;padding:16px"><span class="glow">${I.seal}</span><div class="stat mt8">85%</div><div class="t-foot">of training days verified</div></div></div>
+    <div class="card mt16"><div class="row between"><span class="t-head" style="font-size:19px">November 2026</span><span class="row g8"><button class="circlebtn" style="width:34px;height:34px;font-size:14px;color:var(--glow)" data-act="toast" data-v="Goes back to October.">${I.chevL}</button><button class="circlebtn" style="width:34px;height:34px;font-size:14px;color:var(--ter)">${I.chevR}</button></span></div>
+      <div class="cal">${cells}</div>
+      <div class="legend"><span><i style="background:var(--accent)"></i>Verified</span><span><i style="border:1.5px dashed var(--glow)"></i>Emergency</span><span><i style="background:var(--sunken)"></i>Missed</span></div></div>
+    <div class="card mt16"><div class="row between" style="align-items:flex-start"><div><div class="t-sub">Bodyweight</div><div class="row g8" style="align-items:baseline"><span class="stat" style="font-size:40px">${last.toFixed(1)}</span><span class="t-sub">lb</span></div>
+      <div class="t-foot">${Math.abs(change)<0.05?`Steady over ${ws.length-1} weeks`:`${change>0?'Up':'Down'} ${Math.abs(change)} lb over ${ws.length-1} weeks`}</div></div>
+      <button class="pill glow" style="font-size:16px;padding:9px 14px" data-act="openWeigh">${I.plus} Log</button></div>
+      <svg viewBox="-6 -8 312 110" width="100%" height="120" class="mt16"><path d="${path}" fill="none" stroke="var(--glow)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        ${pts.map(p=>`<circle cx="${p[0]}" cy="${p[1]}" r="4" fill="#000" stroke="var(--glow)" stroke-width="2.5"/>`).join('')}</svg>
+      <p class="t-foot mt8">Log your weight once a week, same time of day. PowerLock tracks the trend; it can't promise a result.</p></div>
+    <div class="secthead"><span class="t-heading">Unlocks and rule changes</span></div>
+    <div class="group">${S.history.slice().reverse().map(h=>`<div class="lrow" style="--inset:66px;align-items:flex-start"><span class="icotile wash">${I[histIcon[h.icon]||'list']}</span><span class="tx"><b>${h.title}</b><small>${h.detail}</small></span><span class="t-foot">${h.date}</span></div>`).join('')}</div>`;
+}
+
+/* =====================================================================
+   Workout detail
+   ===================================================================== */
+function renderWorkout(){
+  const w = S.workoutName, data = WORKOUTS[w];
+  const list = data.ex.map((e,i)=>`<div class="lrow" style="--inset:62px;align-items:flex-start"><span class="numdot" style="margin-top:12px">${i+1}</span>
+    <span class="tx"><b>${e.n}</b><small>${e.sets} · ${e.rest}</small><small class="glow" style="color:var(--glow)">${e.start}</small>${e.note?`<small class="t-foot" style="font-size:13px">${e.note}</small>`:''}</span>
+    <button class="glow" style="font-size:22px;margin-top:12px" data-act="swap" data-w="${w}" data-i="${i}" aria-label="Swap exercise">${I.swap}</button></div>`).join('');
+  return `<div class="view"><div class="pad-top" style="height:50px"></div><div class="navbar"><button class="back" data-act="closeWorkout">${I.chevL}</button></div>
+    <div class="scroll" data-scroll><div class="glow mt8" style="font-size:16px">${data.focus}</div><h1 class="t-display" style="margin-top:6px">${w}</h1>
+      <p class="t-sub mt8" style="font-size:16px">${data.ex.length} exercises · about ${plan().min} min · ${target()} min at the gym to verify</p>
+      <div class="group mt16">${list}</div>
+      <p class="t-foot mt12">Don't like an exercise, or the machine is taken? Swap it for one that trains the same thing.</p><div style="height:120px"></div></div></div>`;
+}
+
+/* =====================================================================
+   Session
+   ===================================================================== */
+const pad = n => String(n).padStart(2,'0');
+const clock = s => `${pad(Math.floor(s/60))}:${pad(Math.floor(s%60))}`;
+function renderSession(){
+  const s = S.sess, w = todayWorkout() || 'Session', ex = WORKOUTS[w] ? WORKOUTS[w].ex : [];
+  const nav = `<div class="pad-top" style="height:50px"></div><div class="navbar"><button class="back" data-act="closeSession">${I.chevL}</button><div class="ttl">${w}</div></div>`;
+  if (s.state==='away') return `<div class="view">${nav}<div class="scroll"><div class="card mt8" style="text-align:center;padding:36px 22px">
+      <span class="icotile wash" style="width:56px;height:56px;font-size:24px;margin:0 auto">${I.pinSlash}</span>
+      <h2 class="t-head mt16" style="font-size:20px">You're not at ${gymName()} yet</h2>
+      <p class="t-sub mt8">You're about 0.62 mi away. Start your session once you're inside. Nothing counts against you for trying.</p></div>
+      <div class="stack g12 mt20"><button class="btn primary" data-act="sessTry">Try again</button><button class="btn secondary" data-act="toast" data-v="Pick a nearby gym for today only. Your home gym stays the same.">I'm at a different gym</button></div></div></div>`;
+  const ver = s.state==='verified', paused = s.state==='paused';
+  const done = ver ? ex.length : s.done.size;
+  const ringHTML = ver
+    ? `<div class="ringwrap">${ring(300,12,1)}<div class="verified-disc"><span style="font-size:68px;color:#fff">${I.check}</span><span style="font-size:24px;font-weight:600">Verified</span></div></div>`
+    : `<div class="ringwrap" id="sessRing">${ring(300,12,s.secs/(target()*60))}<div class="mid"><div class="clock" id="sessClock">${clock(s.secs)}</div><div class="t-sub mt8" style="font-size:16px">of ${target()} min verified</div></div></div>`;
+  const status = ver
+    ? `<div style="text-align:center" class="mt16"><div class="glow t-head" style="font-size:19px">${I.lockOpen} Apps unlocked</div><div class="t-sub mt8">${target()} min at ${gymName()}. They stay open for the rest of today.</div></div>`
+    : paused ? `<div style="text-align:center" class="mt16"><div class="t-head" style="font-size:19px"><span class="sec">❚❚</span> Outside ${gymName()}</div><div class="t-foot">The clock is paused. Your minutes are kept.</div></div>`
+    : `<div style="text-align:center" class="mt16"><div class="t-head" style="font-size:19px"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--glow);margin-right:6px;vertical-align:2px"></span>At ${gymName()}</div><div class="t-foot">GPS accurate to 15 m · counting</div></div>`;
+  const pausedCard = paused ? `<div class="card mt16"><div class="row g12"><span class="icotile wash">${I.locSlash}</span><span><span class="t-head" style="display:block;font-size:18px">Can't find you at the gym</span><span class="t-sub">Your verified minutes are safe.</span></span></div>
+      <p class="t-sub mt12" style="font-size:16px;line-height:22px">GPS can struggle indoors or in a basement. Step near a window or the entrance for a minute. If you're really here and it still won't count, don't let it ruin your day.</p>
+      <button class="btn secondary mt12" data-act="gpsUnlock">Unlock for today</button><button class="btn quiet" data-act="toast" data-v="Opens a problem report with diagnostics attached.">Report a problem</button></div>` : '';
+  const stats = `<div class="stat3 mt20" style="text-align:center"><div><span class="v" style="font-size:22px">${s.start}</span><span class="l">Started</span></div><div><span class="v" style="font-size:22px">${target()} min</span><span class="l">Target</span></div><div><span class="v" style="font-size:22px">${ver?S.streak:`${S.streak} → ${S.streak+1}`}</span><span class="l">Streak</span></div></div>`;
+  const list = `<div class="secthead"><span class="t-heading">Workout</span><span class="t-sub">${done} of ${ex.length}</span></div>
+    <div class="group">${ex.map((e,i)=>{ const d = ver || s.done.has(i); return `<button class="exrow ${d?'done':''}" data-act="tick" data-v="${i}">${mark(d)}<span><b>${e.n}</b><small>${e.sets} · ${e.rest} · ${e.start}</small></span></button>`; }).join('')}</div>`;
+  return `<div class="view">${nav}<div class="scroll" data-scroll>${ringHTML}${status}${pausedCard}${stats}${list}<div style="height:120px"></div></div>
+    <div class="foot">${ver?`<button class="btn primary" data-act="sessDone">Done</button>`:`<button class="btn secondary" data-act="endSession">End session</button>`}</div></div>`;
+}
+let sessTimer=null;
+function startSessTimer(){
+  clearInterval(sessTimer);
+  sessTimer = setInterval(()=>{
+    const s=S.sess; if (!s || S.route!=='session' || s.state!=='running'){ return; }
+    s.secs += 6; // 60× speed
+    if (s.secs >= target()*60){ s.secs = target()*60; s.state='verified'; S.day='unlocked'; S.streak++; render(); return; }
+    const c=document.getElementById('sessClock'), r=document.querySelector('#sessRing .ringfill');
+    if (c){ c.textContent=clock(s.secs); const len=parseFloat(r.getAttribute('stroke-dasharray')); r.setAttribute('stroke-dashoffset', len*(1-s.secs/(target()*60))); }
+  }, 100);
+}
+function newSession(state='running', secs=0){
+  const d=new Date(); let h=d.getHours(), m=d.getMinutes(); const ap=h>=12?'PM':'AM'; h=h%12||12;
+  S.sess = {state, secs, done:new Set(), start:`${h}:${pad(m)} ${ap}`};
+}
+
+/* =====================================================================
+   Lock screen (Screen Time shield)
+   ===================================================================== */
+function renderShield(){
+  const w = todayWorkout() || 'Your session';
+  return `<div class="view"><div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:0 28px;gap:14px">
+    ${brandTile(78)}<h1 class="t-heading mt8" style="font-size:22px">Locked until you train</h1>
+    <p class="t-sub" style="margin:0">Today: ${w}, ${plan().min} min<br>Train at ${gymName()} to unlock.</p></div>
+    <div class="foot" style="padding-left:24px;padding-right:24px"><button class="btn primary" style="border-radius:14px;min-height:50px" data-act="shieldOK">OK</button>
+    <button class="btn quiet mt8" data-act="shieldGym">I'm at the gym</button></div></div>`;
+}
+
+/* =====================================================================
+   Sheets: settings, emergency unlock, log weight, reset confirm
+   ===================================================================== */
+function renderSheet(){
+  let inner='';
+  if (S.sheet==='settings'){
+    const days = [1,2,3,4,5,6,0].filter(d=>S.week[d]).map(d=>DOW3[d]).join(', ');
+    const srow = (ic,l,v,act,arg,chev=true)=>`<button class="srow" ${act?`data-act="${act}" data-v="${arg||''}"`:''}><span class="sic">${I[ic]}</span><span class="lbl">${l}</span><span class="val">${v}${chev?`<span style="font-size:13px;color:var(--ter)">${I.chevR}</span>`:''}</span></button>`;
+    inner = `<div class="navbar" style="margin-top:6px"><div class="ttl">Settings</div><button class="pillbtn r" data-act="closeSheet">Done</button></div>
+      <div class="scroll" data-scroll style="padding:0 16px">
+        <div class="setgroup-title">Lock</div><div class="group">${srow('lock','Locked apps',`${S.apps} apps`,'changeApps')}${srow('pin','Gym',S.gym===0?'Current location':GYMS[S.gym].name,'toast','Changing your gym takes effect tomorrow.')}${srow('calendar','Training days',days,'toast','Adding a day applies now. Removing one applies from tomorrow.')}</div>
+        <div class="setgroup-title">Schedule</div><div class="group">
+          <div class="srow" style="min-height:66px"><span class="sic">${I.sunrise}</span><span class="lbl">Wake time</span><input type="time" class="timepill" data-time="wake" value="${S.wake}"></div>
+          <div class="srow" style="min-height:66px"><span class="sic">${I.moon}</span><span class="lbl">Bedtime</span><input type="time" class="timepill" data-time="bed" value="${S.bed}"></div>
+          <button class="srow" data-act="cycleAllow"><span class="sic">${I.key}</span><span class="lbl">Emergency unlocks</span><span class="val glow" style="color:var(--glow)">${S.allow} a week ${I.updown}</span></button></div>
+        <p class="setnote">Apps lock at wake time on training days and open when your session is verified, or at bedtime. Loosening a rule takes effect tomorrow. Tightening takes effect now.</p>
+        <div class="setgroup-title">Subscription</div><div class="group">${srow('seal','PowerLock','Active','', '', false)}${srow('card','Manage subscription','','toast','Opens Apple subscription management.',false)}${srow('refresh','Restore purchases','','toast','Your subscription is active.',false)}</div>
+        <div class="setgroup-title">Permissions</div><div class="group">${srow('hourglass','Screen Time','On','', '', false)}${srow('bell','Notifications',S.notif?'On':'Not asked','allowNotif','',false)}</div>
+        <p class="setnote">You can turn any of these off in iOS Settings at any time. PowerLock is a commitment you keep, not a cage.</p>
+        <div class="setgroup-title">Help</div><div class="group">${srow('bubble','Report a problem','','toast','Opens a problem report.',false)}${srow('doc','Terms of Use','','toast','Opens powerlock.app/terms',false)}${srow('shield','Privacy Policy','','toast','Opens powerlock.app/privacy',false)}${srow('lock','Preview lock screen','','previewShield','',true)}</div>
+        <div class="group mt20"><button class="srow" data-act="askReset" style="justify-content:center"><span class="lbl" style="color:var(--danger);text-align:center">Reset all data</span></button></div>
+        <p class="setnote">PowerLock is a training tool, not medical advice.<br><br>PowerLock 1.0. Everything is stored on this iPhone.</p><div style="height:60px"></div></div>`;
+  }
+  if (S.sheet==='emergency'){
+    const w = todayWorkout() || "Today's session";
+    if (S.day!=='locked') inner = emHead() + `<div class="scroll"><div class="card mt16" style="text-align:center"><span class="icotile wash" style="margin:0 auto">${I.lockOpen}</span><div class="t-head mt12">Nothing to unlock</div><div class="t-sub">Your apps aren't locked right now.</div></div></div>`;
+    else if (emLeft()===0) inner = emHead() + `<div class="scroll"><div class="card mt16"><div class="t-head">No emergency unlocks left</div><p class="t-sub">You've used all ${S.allow} this week. They reset at the start of next week. The lock ends at ${fmtTime(S.bed)} tonight.</p></div>
+      <button class="btn quiet mt12" data-act="toast" data-v="Opens a problem report.">Report a problem</button><p class="t-foot">If PowerLock failed to verify a real gym visit, tell us. That's a bug, and it shouldn't cost you your day.</p></div>`;
+    else if (S.countdown===0) inner = emHead() + `<div class="scroll" data-scroll><h1 class="t-title mt8" style="font-size:30px">Life happens.</h1><p class="t-sub mt8" style="font-size:17px;line-height:23px">This opens your apps for the rest of today. Here's what it costs.</p>
+      <div class="group mt16">${[['key',`${emLeft()} of ${S.allow} left this week`,`Using one leaves ${emLeft()-1}.`],['list','It goes on your record','Your reason is saved in Progress.'],['flameO','Your streak pauses',"It doesn't break, and it doesn't grow."]]
+        .map(([ic,t,d])=>`<div class="lrow" style="--inset:66px"><span class="icotile wash">${I[ic]}</span><span class="tx"><b>${t}</b><small>${d}</small></span></div>`).join('')}</div>
+      <div class="t-head mt24" style="font-size:19px">What came up?</div>
+      <textarea id="reasonIn" class="textbox mt12" placeholder="Sick, travel, family…">${S.reason}</textarea></div>
+      <div class="foot"><button class="btn primary" data-act="closeSheet">Keep it locked</button><button class="btn secondary mt8" id="emContinue" data-act="emContinue" ${S.reason.trim()?'':'disabled'}>Continue</button></div>`;
+    else { const rem = S.countdown;
+      inner = emHead() + `<div class="scroll" style="display:flex;flex-direction:column;align-items:center;text-align:center;padding-top:40px">
+        <div style="position:relative;width:200px;height:200px" id="emRing">${ring(200,10,rem>0?(60-rem)/60:1)}<div id="emNum" style="position:absolute;inset:0;display:grid;place-items:center;font-size:64px;font-weight:200">${Math.max(rem,0)}</div></div>
+        <h2 class="t-title mt24" id="emTitle">${rem>0?'Take a minute.':'Still want to unlock?'}</h2>
+        <p class="t-sub mt8" style="font-size:17px;line-height:23px">${w} is ${plan().min} minutes at ${gymName()}. Is that really off the table today?</p></div>
+        <div class="foot"><button class="btn primary" data-act="closeSheet">Keep it locked</button><button class="btn secondary mt8" id="emUnlock" data-act="emUnlock" ${rem>0?'disabled':''}>${rem>0?`Unlock in ${rem}s`:'Unlock for today'}</button></div>`; }
+  }
+  if (S.sheet==='weigh'){
+    inner = `<div class="navbar" style="margin-top:6px"><button class="pillbtn" data-act="closeSheet">Cancel</button><div class="ttl">Log weight</div></div>
+      <div class="scroll"><div class="card row mt24" style="justify-content:center;align-items:baseline;gap:8px;padding:30px 20px">
+        <input id="weighIn" inputmode="decimal" value="${S.weights[S.weights.length-1].toFixed(1)}" style="width:200px;background:none;border:0;outline:none;text-align:right;font-size:64px;font-weight:200;caret-color:var(--glow)"><span class="t-heading sec">lb</span></div></div>
+      <div class="foot"><button class="btn primary" data-act="saveWeigh">Save</button></div>`;
+  }
+  if (S.sheet==='reset'){
+    return `<div class="sheet-bg" data-act="closeSheet"></div><div style="position:absolute;left:10px;right:10px;bottom:34px;z-index:95;animation:up .3s">
+      <div style="background:rgba(30,31,36,.98);border-radius:14px;text-align:center;overflow:hidden"><div style="padding:16px;font-size:13px;color:var(--sec)"><b style="display:block;color:var(--label);margin-bottom:4px">Reset all data?</b>This erases your plan, history and settings from this iPhone and unlocks your apps. It can't be undone. Your subscription isn't affected.</div>
+      <button style="display:block;width:100%;padding:16px;border-top:1px solid var(--hair);color:var(--danger);font-size:19px;text-align:center" data-act="doReset">Reset everything</button></div>
+      <button style="display:block;width:100%;margin-top:8px;padding:16px;background:rgba(30,31,36,.98);border-radius:14px;color:var(--glow);font-size:19px;font-weight:600;text-align:center" data-act="closeSheet">Cancel</button></div>`;
+  }
+  return `<div class="sheet-bg" data-act="closeSheet"></div><div class="sheet"><div class="grabber"></div>${inner}</div>`;
+}
+const emHead = () => `<div class="navbar" style="margin-top:6px"><button class="pillbtn" data-act="closeSheet">Close</button><div class="ttl">Emergency unlock</div></div>`;
+let emTimer=null;
+function runCountdown(){
+  clearInterval(emTimer);
+  emTimer = setInterval(()=>{
+    if (S.sheet!=='emergency' || S.countdown<=0){ clearInterval(emTimer); return; }
+    S.countdown = Math.max(S.countdown-1, -1); // demo: 6× faster than the real minute
+    const rem = Math.max(S.countdown,0);
+    const n=document.getElementById('emNum'), r=document.querySelector('#emRing .ringfill'), b=document.getElementById('emUnlock'), t=document.getElementById('emTitle');
+    if (n){ n.textContent=rem; const len=parseFloat(r.getAttribute('stroke-dasharray')); r.setAttribute('stroke-dashoffset', len*(rem/60));
+      b.textContent = rem>0?`Unlock in ${rem}s`:'Unlock for today'; b.disabled = rem>0; t.textContent = rem>0?'Take a minute.':'Still want to unlock?'; }
+    if (S.countdown<=0){ S.countdown=-1; clearInterval(emTimer); }
+  }, 1000/6);
+}
+
+/* =====================================================================
+   Actions
+   ===================================================================== */
+const A = {
+  onbNext(){ if (!onbCanContinue()) return;
+    if (S.onb===ONB.length-1){ S.route='paywall'; render(); return; }
+    S.onb++; render(); },
+  onbBack(){ if (S.onb>0){ S.onb--; if (ONB[S.onb]==='years') S.revealed=true; render(); } },
+  pick(el){ const k=el.dataset.k; S.a[k] = el.dataset.num ? Number(el.dataset.v) : el.dataset.v; if (k==='equip' && el.dataset.v==='gym') S.a.pullup=false; render(); },
+  togglePullup(){ S.a.pullup=!S.a.pullup; render(); },
+  pickPlan(el){ S.planIdx=Number(el.dataset.v); S.week={...PLANS[S.planIdx].week}; render(); },
+  toggleDay(el){ const d=Number(el.dataset.v);
+    if (S.week[d]){ if (Object.keys(S.week).length<=1){ toast('The minimum is one day a week.'); return; } delete S.week[d]; }
+    else { const names=[...new Set(Object.values(PLANS[S.planIdx].week))]; const used=Object.values(S.week); S.week[d]=names.find(n=>!used.includes(n))||names[0]; }
+    render(); },
+  resetWeek(){ S.week={...PLANS[S.planIdx].week}; render(); },
+  pickGym(el){ S.gym=Number(el.dataset.v); render(); },
+  changeApps(){ S.apps = S.apps>=6?2:S.apps+1; toast("On iPhone this opens Apple's Screen Time app picker."); render(); },
+  setAllow(el){ S.allow=Number(el.dataset.v); render(); },
+  cycleAllow(){ S.allow = S.allow>=3?1:S.allow+1; render(); },
+  allowNotif(){ S.notif=true; render(); },
+  payPlan(el){ S.payPlan=el.dataset.v; render(); },
+  subscribe(){ S.route='main'; S.tab='today'; S.day = todayWorkout()?'locked':'rest'; render(); },
+  tab(el){ S.tab=el.dataset.v; S.route='main'; render(); const sc=document.querySelector('[data-scroll]'); if(sc) sc.scrollTop=0; },
+  openSettings(){ S.sheet='settings'; render(); },
+  openEmergency(){ S.sheet='emergency'; S.reason=''; S.countdown=0; render(); },
+  openWeigh(){ S.sheet='weigh'; render(); },
+  closeSheet(){ S.sheet=null; clearInterval(emTimer); render(); },
+  emContinue(){ if(!S.reason.trim()) return; S.countdown=60; render(); runCountdown(); },
+  emUnlock(){ S.emUsed++; S.day='emergency'; S.history.push({icon:'key',title:'Emergency unlock',detail:S.reason.trim()||'No reason given.',date:'Nov 14'}); S.sheet=null; S.route='main'; S.tab='today'; render(); },
+  saveWeigh(){ const v=parseFloat(document.getElementById('weighIn').value); if (v>=50&&v<=700){ S.weights.push(v); if (S.weights.length>6) S.weights.shift(); } S.sheet=null; render(); },
+  askReset(){ S.sheet='reset'; render(); },
+  doReset(){ S = fresh(); render(); },
+  previewShield(){ S.sheet=null; S.route='shield'; render(); },
+  shieldOK(){ S.route='main'; render(); },
+  shieldGym(){ A.startSession(); },
+  startSession(){
+    if (!todayWorkout()){ toast('Today is a rest day.'); return; }
+    if (S.day==='unlocked') newSession('verified', target()*60);
+    else if (!S.sess || S.sess.state==='verified') newSession();
+    S.route='session'; render(); startSessTimer(); },
+  sessTry(){ S.sess.state='running'; render(); startSessTimer(); },
+  closeSession(){ S.route='main'; S.tab='today'; render(); },
+  endSession(){ if (confirm('End this session? Your verified minutes are kept, but your apps stay locked until you reach the target.')){ S.route='main'; render(); } },
+  sessDone(){ S.route='main'; S.tab='today'; render(); },
+  gpsUnlock(){ S.day='emergency'; S.history.push({icon:'key',title:'GPS unlock',detail:"Couldn't verify at the gym. Didn't use an emergency unlock.",date:'Nov 14'}); S.route='main'; S.tab='today'; render(); },
+  tick(el){ const i=Number(el.dataset.v); if (S.sess.state==='verified') return; S.sess.done.has(i)?S.sess.done.delete(i):S.sess.done.add(i); render(); },
+  openWorkout(el){ S.workoutName=el.dataset.v; S.prevRoute=S.route; S.route='workout'; render(); },
+  closeWorkout(){ S.route='main'; render(); },
+  swap(el){ const w=el.dataset.w, i=Number(el.dataset.i), e=WORKOUTS[w].ex[i]; const alts=SWAPS[e.n];
+    if (!alts){ toast('No swap for this one in the prototype.'); return; }
+    const next = alts[0]; SWAPS[next] = [...alts.slice(1), e.n]; toast(`Swapped ${e.n} for ${next}.`); e.n = next; render(); },
+  toast(el){ toast(el.dataset.v); },
+  openMenu(){ document.getElementById('side').classList.add('open'); },
+  closeMenu(){ document.getElementById('side').classList.remove('open'); },
+  jump(el){ JUMPS[el.dataset.v](); render(); document.getElementById('side').classList.remove('open'); },
+};
+
+/* Screen list for jumping around */
+function seedAnswers(){ Object.assign(S.a,{age:'18-24',gender:'male',weight:'170',goal:'muscle',weeks:8,exp:'1-3',equip:'gym',screen:'4'}); }
+function toMain(day, tab='today'){ seedAnswers(); S.route='main'; S.tab=tab; S.day=day; S.sheet=null; S.revealed=true; }
+const JUMPS = {};
+const NAV = [
+  ['Onboarding', ONB.map((p,i)=>[`onb${i}`, ['Intro: earn screen time','Age','Gender','Bodyweight','Goal','Goal length','Experience','Equipment','Screen time','Calculating → years','Pick your plan','Set your week','Where you train','Apps to lock','Set your day','Free trial'][i], ()=>{ if(i>1) seedAnswers(); S.route='onb'; S.onb=i; S.sheet=null; S.revealed = false; S.demoStep=0; }])],
+  ['Paywall', [['pay','Keep your word', ()=>{ seedAnswers(); S.route='paywall'; S.sheet=null; }]]],
+  ['Today', [['tLocked','Locked',()=>toMain('locked')],['tUnlocked','Unlocked (verified)',()=>{ toMain('unlocked'); newSession('verified',3600); }],['tRest','Rest day',()=>toMain('rest')],['tEm','Emergency unlock used',()=>toMain('emergency')]]],
+  ['Session', [['sAway','Not at the gym',()=>{ toMain('locked'); newSession('away'); S.route='session'; }],['sRun','Running',()=>{ toMain('locked'); newSession('running', 27*60+39); S.sess.done=new Set([0,1]); S.route='session'; startSessTimer(); }],['sPause','Paused (GPS lost)',()=>{ toMain('locked'); newSession('paused',18*60); S.sess.done=new Set([0]); S.route='session'; }],['sVer','Verified',()=>{ toMain('unlocked'); newSession('verified',3600); S.route='session'; }]]],
+  ['Plan', [['plan','Plan tab',()=>toMain('locked','plan')],['work','Workout: Lower B',()=>{ toMain('locked','plan'); S.workoutName='Lower B'; S.route='workout'; }]]],
+  ['Progress', [['prog','Progress tab',()=>toMain('locked','progress')]]],
+  ['Sheets', [['set','Settings',()=>{ toMain('locked'); S.sheet='settings'; }],['em','Emergency unlock',()=>{ toMain('locked'); S.sheet='emergency'; S.reason=''; S.countdown=0; }],['emw','Emergency unlock: wait',()=>{ toMain('locked'); S.sheet='emergency'; S.reason='Sick day, staying home.'; S.countdown=60; setTimeout(runCountdown,0); }],['shield','Lock screen (Screen Time)',()=>{ toMain('locked'); S.route='shield'; }]]],
+];
+NAV.forEach(([,items])=>items.forEach(([id,,fn])=>JUMPS[id]=fn));
+function currentNavId(){
+  if (S.sheet==='settings') return 'set';
+  if (S.sheet==='emergency') return S.countdown!==0?'emw':'em';
+  if (S.route==='onb') return 'onb'+S.onb;
+  if (S.route==='paywall') return 'pay';
+  if (S.route==='shield') return 'shield';
+  if (S.route==='workout') return 'work';
+  if (S.route==='session') return ({away:'sAway',running:'sRun',paused:'sPause',verified:'sVer'})[S.sess.state];
+  if (S.route==='main') return S.tab==='plan'?'plan':S.tab==='progress'?'prog':({locked:'tLocked',unlocked:'tUnlocked',rest:'tRest',emergency:'tEm'})[S.day];
+}
+function renderNav(){
+  const cur = currentNavId();
+  document.getElementById('nav').innerHTML = NAV.map(([sec,items])=>`<h2>${sec}</h2><div class="nav">${items.map(([id,l])=>`<button class="${id===cur?'on':''}" data-act="jump" data-v="${id}">${l}</button>`).join('')}</div>`).join('');
+}
+
+/* =====================================================================
+   Render loop
+   ===================================================================== */
+let lastKey='';
+function render(){
+  const app = document.getElementById('app');
+  const sc = app.querySelector('[data-scroll]'), keep = sc ? sc.scrollTop : 0;
+  const key = [S.route,S.onb,S.tab,S.sheet,S.workoutName].join('|');
+  let html = '';
+  if (S.route==='onb') html = renderOnb();
+  else if (S.route==='paywall') html = renderPaywall();
+  else if (S.route==='main') html = renderMain();
+  else if (S.route==='session') html = renderSession();
+  else if (S.route==='workout') html = renderWorkout();
+  else if (S.route==='shield') html = renderShield();
+  if (S.sheet) html += renderSheet();
+  app.innerHTML = html;
+  if (key===lastKey){ const ns = app.querySelector('.view [data-scroll]'); if (ns) ns.scrollTop = keep; }
+  lastKey = key;
+  if (S.route==='onb' && ONB[S.onb]==='years' && !S.revealed) runCalc();
+  if (S.route==='onb' && S.onb===0) runValueDemo();
+  renderNav();
+}
+
+document.addEventListener('click', e=>{
+  const el = e.target.closest('[data-act]'); if (!el) return;
+  const fn = A[el.dataset.act]; if (fn){ e.preventDefault(); fn(el); }
+});
+document.addEventListener('input', e=>{
+  if (e.target.id==='weightIn'){ S.a.weight = e.target.value.replace(/[^0-9.]/g,''); const ok=onbCanContinue();
+    document.getElementById('onbNext').disabled=!ok; document.getElementById('weightErr').style.display=ok?'none':'block'; }
+  if (e.target.id==='reasonIn'){ S.reason=e.target.value; document.getElementById('emContinue').disabled = !S.reason.trim(); }
+});
+document.addEventListener('change', e=>{ const t=e.target.dataset.time; if (t && e.target.value){ S[t]=e.target.value; } });
+document.getElementById('sideLogo').innerHTML = `<div style="width:19px;height:13px">${brandMark()}</div>`;
+render();
+</script>
+</body>
+</html>
